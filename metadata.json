@@ -1,0 +1,6 @@
+{
+  "name": "Threshold of Ash",
+  "description": "An atmospheric top-down mystery and investigation prototype set in an enclosed study and shadowed corridor.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
