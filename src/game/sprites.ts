@@ -155,19 +155,19 @@ const PLAYER_DOWN_WALK1_16 = [
   '.....KSSSSK.....',
   '.....KFFfFK.....',
   '....KCLFFLCK....',
-  '..KKCCLFFLCCK...',
-  '..KSKCCLfLCCK...',
-  '..KKKCLCCCCLCK..',
-  '....KCCCCCCKSK..',
-  '....KccCCccKKK..',
-  '....KCCCCCCK....',
-  '....KCCCCCCK....',
+  '...KCCLFFLCCK...',
+  '...KCCCLfLCCK...',
+  '...KCLCCCCLCK...',
+  '..KSKCCCCCCKCK..',
+  '..KKKCCCCCCKCK..',
+  '....KccCCccKSK..',
+  '....KCCCCCCKKK..',
   '....KPPccPPK....',
   '....KPP..PPK....',
-  '...KPPK..KPPK...',
-  '...KBBK...KBBK..',
-  '...KKK.....KKK..',
-  '................',
+  '....KPP..PPK....',
+  '....KPP..BBK....',
+  '....KBB..KKK....',
+  '....KKK.........',
 ];
 
 const PLAYER_DOWN_WALK2_16 = [
@@ -180,19 +180,19 @@ const PLAYER_DOWN_WALK2_16 = [
   '.....KSSSSK.....',
   '.....KFFfFK.....',
   '....KCLFFLCK....',
-  '...KCCLFFLCCKK..',
-  '...KCCCLfLCCKSK.',
-  '..KCLCCCCLCKKK..',
-  '..KSKCCCCCCK....',
-  '..KKKccCCccK....',
-  '....KCCCCCCK....',
-  '....KCCCCCCK....',
+  '...KCCLFFLCCK...',
+  '...KCCCLfLCCK...',
+  '...KCLCCCCLCK...',
+  '..KCKCCCCCCKSK..',
+  '..KCKCCCCCCKKK..',
+  '..KSKccCCccK....',
+  '..KKKCCCCCCK....',
   '....KPPccPPK....',
   '....KPP..PPK....',
-  '...KPPK..KPPK...',
-  '..KBBK...KBBK...',
-  '..KKK.....KKK...',
-  '................',
+  '....KPP..PPK....',
+  '....KBB..PPK....',
+  '....KKK..BBK....',
+  '.........KKK....',
 ];
 
 const PLAYER_UP_IDLE_16 = [
@@ -230,19 +230,19 @@ const PLAYER_UP_WALK1_16 = [
   '.....KHHHHK.....',
   '.....KCCCCK.....',
   '....KCLCCLCK....',
-  '..KKCCCCCCCCK...',
-  '..KCKCCCCCCCcK..',
-  '..KKKCCCCCCCCK..',
-  '....KCCCCCCKCK..',
-  '....KccCCccKKK..',
-  '....KCCCCCCK....',
-  '....KCCCCCCK....',
+  '...KCCCCCCCCK...',
+  '...KCCcCCcCCK...',
+  '...KCCCCCCCCKK..',
+  '..KCKCCCCCCKCK..',
+  '..KCKCCCCCCKKK..',
+  '..KCKccCCccK....',
+  '..KKKCCCCCCK....',
   '....KPPccPPK....',
   '....KPP..PPK....',
-  '...KPPK..KPPK...',
-  '...KBBK...KBBK..',
-  '...KKK.....KKK..',
-  '................',
+  '....KPP.KBBK....',
+  '....KPP.KKKK....',
+  '....KBBK........',
+  '....KKKK........',
 ];
 
 const PLAYER_UP_WALK2_16 = [
@@ -255,19 +255,19 @@ const PLAYER_UP_WALK2_16 = [
   '.....KHHHHK.....',
   '.....KCCCCK.....',
   '....KCLCCLCK....',
-  '...KCCCCCCCCKK..',
-  '..KcCCCCCCCCKCK.',
-  '..KCCCCCCCCKKK..',
-  '..KCKCCCCCCK....',
-  '..KKKccCCccK....',
-  '....KCCCCCCK....',
-  '....KCCCCCCK....',
+  '...KCCCCCCCCK...',
+  '...KCCcCCcCCK...',
+  '..KKCCCCCCCCK...',
+  '..KCKCCCCCCKCK..',
+  '..KKKCCCCCCKCK..',
+  '....KccCCccKCK..',
+  '....KCCCCCCKKK..',
   '....KPPccPPK....',
   '....KPP..PPK....',
-  '...KPPK..KPPK...',
-  '..KBBK...KBBK...',
-  '..KKK.....KKK...',
-  '................',
+  '....KBBK.PPK....',
+  '....KKKK.PPK....',
+  '........KBBK....',
+  '........KKKK....',
 ];
 
 const PLAYER_RIGHT_IDLE_16 = [
@@ -331,11 +331,11 @@ const PLAYER_RIGHT_WALK2_16 = [
   '.....KCFFFK.....',
   '....KCCLFFCK....',
   '....KCCCLFCK....',
-  '....KCCCLCCKK...',
-  '....KCCcLCCSK...',
-  '....KCCCcCCKK...',
-  '....KccCCccK....',
-  '....KCCCCCCK....',
+  '....KCCCLCCK....',
+  '....KCCcLCCK....',
+  '....KCCKcCCK....',
+  '....KCSKCCCK....',
+  '....KccKKKK.....',
   '....KCCCCCCK....',
   '....KPPccPPK....',
   '....KPP..PPK....',
@@ -712,6 +712,118 @@ export function getPlayerSpriteSheet(): PlayerSpriteSheet {
   };
 
   return cachedPlayerSheet;
+}
+
+const RIGHT_HAND_ANCHORS: Record<PlayerPoseCategory, Array<{ gx: number; gy: number }>> = {
+  // walk frames: [0: idle, 1: walk1 (arm forward), 2: idle, 3: walk2 (arm back)]
+  walk: [
+    { gx: 10, gy: 16 },
+    { gx: 13, gy: 15 },
+    { gx: 10, gy: 16 },
+    { gx: 8, gy: 16 },
+  ],
+  talk: [
+    { gx: 13, gy: 14 },
+    { gx: 15, gy: 13 },
+  ],
+  drawer: [
+    { gx: 15, gy: 15 },
+    { gx: 13, gy: 15 },
+  ],
+  shelf: [
+    { gx: 14, gy: 10 },
+    { gx: 15, gy: 4 },
+  ],
+  floor_books: [
+    { gx: 14, gy: 17 },
+    { gx: 15, gy: 19 },
+  ],
+  tv_crouch: [
+    { gx: 10, gy: 19 },
+    { gx: 10, gy: 20 },
+    { gx: 10, gy: 20 },
+  ],
+};
+
+const DOWN_HAND_ANCHORS: Record<PlayerPoseCategory, Array<{ gx: number; gy: number }>> = {
+  walk: [
+    { gx: 14, gy: 16 },
+    { gx: 14, gy: 17 },
+    { gx: 14, gy: 16 },
+    { gx: 14, gy: 15 },
+  ],
+  talk: [
+    { gx: 15, gy: 14 },
+    { gx: 16, gy: 14 },
+  ],
+  drawer: [
+    { gx: 15, gy: 15 },
+    { gx: 14, gy: 15 },
+  ],
+  shelf: [
+    { gx: 16, gy: 7 },
+    { gx: 16, gy: 2 },
+  ],
+  floor_books: [
+    { gx: 14, gy: 17 },
+    { gx: 15, gy: 18 },
+  ],
+  tv_crouch: [
+    { gx: 14, gy: 19 },
+    { gx: 14, gy: 19 },
+    { gx: 14, gy: 19 },
+  ],
+};
+
+const UP_HAND_ANCHORS: Record<PlayerPoseCategory, Array<{ gx: number; gy: number }>> = {
+  walk: [
+    { gx: 15, gy: 15 },
+    { gx: 15, gy: 14 },
+    { gx: 15, gy: 15 },
+    { gx: 15, gy: 16 },
+  ],
+  talk: [
+    { gx: 16, gy: 6 },
+    { gx: 16, gy: 3 },
+  ],
+  drawer: [
+    { gx: 16, gy: 6 },
+    { gx: 16, gy: 3 },
+  ],
+  shelf: [
+    { gx: 16, gy: 6 },
+    { gx: 16, gy: 0 },
+  ],
+  floor_books: [
+    { gx: 14, gy: 16 },
+    { gx: 14, gy: 17 },
+  ],
+  tv_crouch: [
+    { gx: 14, gy: 19 },
+    { gx: 14, gy: 19 },
+    { gx: 14, gy: 19 },
+  ],
+};
+
+export function getPlayerHandGridPos(
+  category: PlayerPoseCategory,
+  dir: FacingDir,
+  frameIdx: number
+): { gx: number; gy: number } {
+  if (dir === 'down') {
+    const list = DOWN_HAND_ANCHORS[category];
+    return list[Math.min(list.length - 1, Math.max(0, frameIdx))];
+  }
+  if (dir === 'up') {
+    const list = UP_HAND_ANCHORS[category];
+    return list[Math.min(list.length - 1, Math.max(0, frameIdx))];
+  }
+  const list = RIGHT_HAND_ANCHORS[category];
+  const anchor = list[Math.min(list.length - 1, Math.max(0, frameIdx))];
+  if (dir === 'left') {
+    return { gx: CANVAS_W - 1 - anchor.gx, gy: anchor.gy };
+  }
+  return anchor;
 }
 
 export function getNpcSpriteFrames(): HTMLCanvasElement[] {

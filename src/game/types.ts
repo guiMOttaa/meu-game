@@ -214,6 +214,10 @@ export interface LevelProgress {
   doorOpenAmount: number; // 0 (closed) -> 1 (fully open)
   doorShakeTimer: number;
   tvOn: boolean;
+  tvMode: 'off' | 'news' | 'static';
+  tvNewsCompleted: boolean;
+  tvLightSurgePhase: TvLightSurgePhase;
+  tvLightSurgeTimer: number;
   deskLampOn: boolean;
   gateTriggered: boolean;
   gateTransitionTimer: number;
@@ -236,11 +240,14 @@ export interface DialogueState {
   protagonistReaction: string;
 }
 
+export type TvLightSurgePhase = 'none' | 'flickering' | 'blackout' | 'recovering';
+
 export type IntroCutscenePhase = 'none' | 'sleeping' | 'startled' | 'standing';
 
-export const INTRO_SLEEP_END = 1.72;
-export const INTRO_STARTLE_END = 3.35;
-export const INTRO_TOTAL_DURATION = 4.3;
+export const INTRO_WAKE_VOICE_START = 3.65;
+export const INTRO_SLEEP_END = 5.37;
+export const INTRO_STARTLE_END = 7.0;
+export const INTRO_TOTAL_DURATION = 7.95;
 
 export interface IntroCutsceneState {
   active: boolean;
@@ -252,6 +259,7 @@ export interface IntroCutsceneState {
 
 export type AudioLanguageMode = 'dubbed' | 'subtitled';
 export type SubtitleSize = 'small' | 'medium' | 'large';
+export type ColorblindMode = 'none' | 'protanopia' | 'deuteranopia' | 'tritanopia';
 
 export type ControlAction =
   | 'moveUp'
@@ -271,6 +279,9 @@ export interface GameSettings {
   speechVolume: number;
   mode: AudioLanguageMode;
   subtitleSize: SubtitleSize;
+  subtitleBgOpacity: number;
+  monoAudio: boolean;
+  colorblindMode: ColorblindMode;
   controls: KeyBindings;
 }
 
@@ -279,6 +290,52 @@ export interface SubtitleCue {
   speaker?: string;
   text: string;
   duration: number;
+}
+
+export interface GameSaveData {
+  version: 1;
+  chapter: number;
+  savedAt: number;
+  zoneName: string;
+  objectiveText: string;
+  player: {
+    x: number;
+    y: number;
+    facingX: number;
+    facingY: number;
+  };
+  camera: {
+    x: number;
+    y: number;
+  };
+  progress: {
+    keyLocationId: KeySpotId;
+    flashlightLocationId: 'desk_drawer_left' | 'desk_drawer';
+    leftDrawerSearched: boolean;
+    drawerSearched: boolean;
+    leftDrawerOpen: boolean;
+    rightDrawerOpen: boolean;
+    hasFlashlight: boolean;
+    flashlightOn: boolean;
+    activeHandItemId: InventoryItemId | null;
+    hasBackpack: boolean;
+    equippedBackpack: InventoryItem | null;
+    bagCapacity: number;
+    hasKey: boolean;
+    doorUnlocked: boolean;
+    doorOpen: boolean;
+    doorOpenAmount: number;
+    tvOn: boolean;
+    tvNewsCompleted?: boolean;
+    deskLampOn: boolean;
+    currentZone: ZoneId;
+    inspectedIds: string[];
+    npcSpokenOnce: boolean;
+    npcTalkCount: number;
+  };
+  hands: (InventoryItem | null)[];
+  bag: (InventoryItem | null)[];
+  activeHandIndex: number;
 }
 
 

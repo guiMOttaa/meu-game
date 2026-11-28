@@ -1,4 +1,10 @@
-import { ControlAction, GameSettings, KeyBindings, SubtitleSize } from './types';
+import {
+  ColorblindMode,
+  ControlAction,
+  GameSettings,
+  KeyBindings,
+  SubtitleSize,
+} from './types';
 
 const SETTINGS_STORAGE_KEY = 'limiar_das_cinzas_settings_v1';
 
@@ -19,10 +25,22 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = {
   speechVolume: 0.9,
   mode: 'dubbed',
   subtitleSize: 'medium',
+  subtitleBgOpacity: 0.88,
+  monoAudio: false,
+  colorblindMode: 'none',
   controls: { ...DEFAULT_KEY_BINDINGS },
 };
 
 const CONTROL_ACTION_KEYS = Object.keys(DEFAULT_KEY_BINDINGS) as ControlAction[];
+
+function isValidColorblindMode(value: unknown): value is ColorblindMode {
+  return (
+    value === 'none' ||
+    value === 'protanopia' ||
+    value === 'deuteranopia' ||
+    value === 'tritanopia'
+  );
+}
 
 export function loadGameSettings(): GameSettings {
   if (typeof window === 'undefined') return DEFAULT_GAME_SETTINGS;
@@ -55,6 +73,17 @@ export function loadGameSettings(): GameSettings {
         parsed.subtitleSize === 'large'
           ? parsed.subtitleSize
           : 'medium',
+      subtitleBgOpacity:
+        typeof parsed.subtitleBgOpacity === 'number' && !Number.isNaN(parsed.subtitleBgOpacity)
+          ? Math.max(0, Math.min(1, parsed.subtitleBgOpacity))
+          : DEFAULT_GAME_SETTINGS.subtitleBgOpacity,
+      monoAudio:
+        typeof parsed.monoAudio === 'boolean'
+          ? parsed.monoAudio
+          : DEFAULT_GAME_SETTINGS.monoAudio,
+      colorblindMode: isValidColorblindMode(parsed.colorblindMode)
+        ? parsed.colorblindMode
+        : DEFAULT_GAME_SETTINGS.colorblindMode,
       controls,
     };
   } catch {

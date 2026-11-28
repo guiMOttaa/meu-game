@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { ChapterSelectScreen } from './components/ChapterSelectScreen';
+import { CutsceneSkipHold } from './components/CutsceneSkipHold';
 import { DialogueOverlay } from './components/DialogueOverlay';
 import { GameCanvas } from './components/GameCanvas';
 import { HudOverlay } from './components/HudOverlay';
@@ -9,9 +11,11 @@ import { LevelCompleteModal, PauseModal } from './components/ModalScreens';
 import { OpeningCutscene } from './components/OpeningCutscene';
 import { SettingsModal } from './components/SettingsModal';
 import { TitleScreen } from './components/TitleScreen';
+import { ColorblindFilterDefs, getColorblindCssFilter } from './game/accessibility';
 import { soundEngine } from './game/audio';
 import { initRusticCursors } from './game/cursor';
 import { GameEngine, HAND_SLOT_COUNT, HudSnapshot, MAX_BAG_SLOTS } from './game/engine';
+import { loadSavedGame, writeSavedGame } from './game/save';
 import {
   getWorldSubtitleTextClass,
   loadGameSettings,
@@ -20,6 +24,7 @@ import {
 import {
   DialogueState,
   GamePhase,
+  GameSaveData,
   GameSettings,
   InventoryItem,
   InventorySlotRef,
@@ -38,6 +43,7 @@ const INITIAL_HUD: HudSnapshot = {
   flashlightOn: false,
   nearestId: null,
   cutsceneActive: false,
+  showPresentDayTitle: false,
 };
 
 export default function App() {
@@ -46,11 +52,11 @@ export default function App() {
   const [subtitle, setSubtitle] = useState<SubtitleCue | null>(null);
   const [dialogue, setDialogue] = useState<DialogueState | null>(null);
   const [inspectedItem, setInspectedItem] = useState<InventoryItem | null>(null);
-  const [muted, setMuted] = useState(false);
   const [settings, setSettings] = useState<GameSettings>(() => loadGameSettings());
   const [pauseSettingsOpen, setPauseSettingsOpen] = useState(false);
   const [resetToken, setResetToken] = useState(0);
   const [enteredFromChapters, setEnteredFromChapters] = useState(false);
+  const [savedGame, setSavedGame] = useState<GameSaveData | null>(() => loadSavedGame());
 
   const engineRef = useRef<GameEngine | null>(null);
   const subtitleTimerRef = useRef<number | null>(null);
@@ -197,9 +203,34 @@ export default function App() {
     setPhase('PLAYING');
   }, [settings, handleSubtitle]);
 
+  const handleLoadSavedGame = useCallback(() => {
+    const save = loadSavedGame() ?? savedGame;
+    if (!save || !engineRef.current) return;
+    soundEngine.playUiClick();
+    soundEngine.applySettings(settings);
+    soundEngine.startAmbience();
+    handleSubtitle(null);
+    setInspectedItem(null);
+    setPauseSettingsOpen(false);
+    setEnteredFromChapters(false);
+    engineRef.current.loadSaveData(save);
+    setSavedGame(save);
+    setPhase('PLAYING');
+  }, [savedGame, settings, handleSubtitle]);
+
+  const handleSaveGame = useCallback((): boolean => {
+    if (!engineRef.current) return false;
+    soundEngine.playUiClick();
+    const data = engineRef.current.exportSaveData();
+    const ok = writeSavedGame(data);
+    if (ok) {
+      setSavedGame(data);
+    }
+    return ok;
+  }, []);
+
   const handleToggleMute = useCallback(() => {
-    const nextMuted = soundEngine.toggleMute();
-    setMuted(nextMuted);
+    soundEngine.toggleMute();
   }, []);
 
   const handlePauseRequest = useCallback(() => {
@@ -267,9 +298,28 @@ export default function App() {
     setInspectedItem(item);
   }, []);
 
+  const handleSkipActiveCutscene = useCallback(() => {
+    if (phase === 'OPENING_CUTSCENE') {
+      soundEngine.stopCutsceneEntityDrone();
+      completeOpeningCutscene();
+      return;
+    }
+    if (phase === 'PLAYING' && hud.cutsceneActive) {
+      engineRef.current?.skipActiveCutscene();
+    }
+  }, [phase, hud.cutsceneActive, completeOpeningCutscene]);
+
+  const isAnyCutsceneActive =
+    phase === 'OPENING_CUTSCENE' || (phase === 'PLAYING' && hud.cutsceneActive);
+
   return (
-    <main className="relative h-screen w-screen overflow-hidden bg-[#07090d]">
-      <GameCanvas
+    <>
+      <ColorblindFilterDefs />
+      <main
+        style={{ filter: getColorblindCssFilter(settings.colorblindMode) }}
+        className="relative h-screen w-screen overflow-hidden bg-[#07090d]"
+      >
+        <GameCanvas
         phase={phase}
         resetToken={resetToken}
         keyBindings={settings.controls}
@@ -296,8 +346,10 @@ export default function App() {
       {phase === 'TITLE' && (
         <TitleScreen
           settings={settings}
+          savedGame={savedGame}
           onUpdateSettings={setSettings}
           onStart={startOpeningCutscene}
+          onLoadGame={handleLoadSavedGame}
           animateFxEntry={enteredFromChapters}
           onBackToChapters={() => {
             setEnteredFromChapters(false);
@@ -322,6 +374,24 @@ export default function App() {
             />
           )}
 
+          <AnimatePresence>
+            {hud.showPresentDayTitle && (
+              <motion.div
+                key="present-day-title"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.45, ease: 'easeInOut' }}
+                aria-live="polite"
+                className="pointer-events-none fixed inset-0 z-30 flex items-center justify-center px-6 text-center select-none"
+              >
+                <p className="font-narrator w-full pl-[0.05em] pt-[0.04em] text-[44px] leading-none italic tracking-[0.05em] text-[#f4ede0]/72 drop-shadow-[0_4px_22px_rgba(0,0,0,0.92)] sm:text-[62px] lg:text-[78px]">
+                  Dias atuais
+                </p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {subtitle && !dialogue?.active && !hud.inventoryOpen && (
             <div
               key={subtitle.id}
@@ -330,7 +400,10 @@ export default function App() {
                 hud.cutsceneActive ? 'bottom-8 sm:bottom-11' : 'bottom-24 sm:bottom-28'
               }`}
             >
-              <div className="max-w-2xl border border-[#d8a24a]/35 bg-[#080a0f]/88 px-5 py-2.5 text-center shadow-[0_10px_28px_rgba(0,0,0,0.75)]">
+              <div
+                style={{ backgroundColor: `rgba(8, 10, 15, ${settings.subtitleBgOpacity})` }}
+                className="max-w-2xl border border-[#d8a24a]/35 px-5 py-2.5 text-center shadow-[0_10px_28px_rgba(0,0,0,0.75)]"
+              >
                 <p className={`text-[#efe7d8] ${getWorldSubtitleTextClass(settings.subtitleSize)}`}>
                   {subtitle.speaker && (
                     <span className="mr-2 font-semibold text-[#d8a24a]">
@@ -365,6 +438,7 @@ export default function App() {
             <DialogueOverlay
               dialogue={dialogue}
               subtitleSize={settings.subtitleSize}
+              subtitleBgOpacity={settings.subtitleBgOpacity}
               interactKey={settings.controls.interact}
               onAdvance={handleAdvanceDialogue}
               onClose={handleCloseDialogue}
@@ -376,16 +450,15 @@ export default function App() {
       {phase === 'PAUSED' && (
         <>
           <PauseModal
-            muted={muted}
             keyBindings={settings.controls}
             disableEscClose={pauseSettingsOpen}
             onResume={handleResume}
+            onSaveGame={handleSaveGame}
             onRestart={startOrRestart}
             onOpenSettings={() => {
               soundEngine.playUiClick();
               setPauseSettingsOpen(true);
             }}
-            onToggleMute={handleToggleMute}
             onTitle={handleReturnToTitle}
           />
           {pauseSettingsOpen && (
@@ -405,6 +478,12 @@ export default function App() {
           onTitle={handleReturnToTitle}
         />
       )}
-    </main>
+
+      <CutsceneSkipHold
+        active={isAnyCutsceneActive}
+        onSkip={handleSkipActiveCutscene}
+      />
+      </main>
+    </>
   );
 }

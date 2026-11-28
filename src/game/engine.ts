@@ -6,10 +6,12 @@ import {
   DialogueState,
   DustMote,
   GamePhase,
+  GameSaveData,
   Interactable,
   INTRO_SLEEP_END,
   INTRO_STARTLE_END,
   INTRO_TOTAL_DURATION,
+  INTRO_WAKE_VOICE_START,
   IntroCutsceneState,
   InventoryItem,
   InventorySlotRef,
@@ -45,6 +47,7 @@ export interface HudSnapshot {
   flashlightOn: boolean;
   nearestId: string | null;
   cutsceneActive: boolean;
+  showPresentDayTitle: boolean;
 }
 
 export interface EngineCallbacks {
@@ -55,6 +58,52 @@ export interface EngineCallbacks {
   onPauseRequest: () => void;
   onToggleMute: () => void;
 }
+
+const TV_NEWS_DURATION = 31.85;
+const TV_NEWS_SCARE_START = 28.55;
+const TV_BLACKOUT_DURATION = 1.75;
+const TV_RECOVERY_DURATION = 3.25;
+const TV_STATIC_DURATION = 2.45;
+
+const TV_NEWS_SUBTITLES: Array<{ at: number; duration: number; speaker: string; text: string }> = [
+  { at: 0.0, duration: 1.2, speaker: 'Jornal', text: 'E na cultura.' },
+  {
+    at: 1.15,
+    duration: 3.85,
+    speaker: 'Jornal',
+    text: 'O fenômeno literário do ano segue batendo recordes históricos.',
+  },
+  {
+    at: 4.95,
+    duration: 7.2,
+    speaker: 'Jornal',
+    text: 'Sem qualquer divulgação prévia, a obra atingiu a marca impressionante de 100 milhões de cópias comercializadas em todo mundo.',
+  },
+  {
+    at: 12.1,
+    duration: 7.25,
+    speaker: 'Jornal',
+    text: 'Críticos afirmam ser quase impossível que um único escritor tenha concebido algo dessa magnitude em tão pouco tempo.',
+  },
+  {
+    at: 19.35,
+    duration: 5.7,
+    speaker: 'Jornal',
+    text: 'Enquanto o público aguarda por um segundo volume, a identidade do autor permanece um mistério.',
+  },
+  {
+    at: 25.0,
+    duration: 3.85,
+    speaker: 'Jornal',
+    text: 'O jornal termina aqui. Tenham uma boa noite. E lembrem-se...',
+  },
+  {
+    at: 28.8,
+    duration: 3.1,
+    speaker: '???',
+    text: 'Cabeça vazia é oficina do...',
+  },
+];
 
 export class GameEngine {
   private canvas: HTMLCanvasElement;
@@ -95,6 +144,8 @@ export class GameEngine {
   private keyBindings: KeyBindings = { ...DEFAULT_KEY_BINDINGS };
   private dialogue: DialogueState | null = null;
   private dialogueVoiceTimer = 0;
+  private tvPlaybackTimer = 0;
+  private tvSubtitleIndex = -1;
   private introCutscene: IntroCutsceneState = {
     active: false,
     phase: 'none',
@@ -190,6 +241,10 @@ export class GameEngine {
       doorOpenAmount: 0,
       doorShakeTimer: 0,
       tvOn: false,
+      tvMode: 'off',
+      tvNewsCompleted: false,
+      tvLightSurgePhase: 'none',
+      tvLightSurgeTimer: 0,
       deskLampOn: true,
       gateTriggered: false,
       gateTransitionTimer: 0,
@@ -237,11 +292,32 @@ export class GameEngine {
   }
 
   public setPhase(phase: GamePhase): void {
+    const prevPhase = this.phase;
     this.phase = phase;
+    if (phase === 'PLAYING' && prevPhase === 'PAUSED') {
+      if (this.progress.tvOn && this.progress.tvMode === 'news') {
+        soundEngine.resumeTvNews();
+      } else if (this.progress.tvOn && this.progress.tvMode === 'static') {
+        const remaining = Math.max(0.25, TV_STATIC_DURATION - this.tvPlaybackTimer);
+        soundEngine.startTvStatic(remaining);
+      }
+      return;
+    }
     if (phase !== 'PLAYING') {
       this.heldKeys.clear();
       this.inventoryOpen = false;
       soundEngine.stopWakeVoice();
+      if (phase === 'PAUSED') {
+        soundEngine.pauseTvAudio();
+      } else {
+        soundEngine.stopTvAudio();
+        this.progress.tvOn = false;
+        this.progress.tvMode = 'off';
+        this.progress.tvLightSurgePhase = 'none';
+        this.progress.tvLightSurgeTimer = 0;
+        this.tvPlaybackTimer = 0;
+        this.tvSubtitleIndex = -1;
+      }
       this.callbacks.onSubtitle(null);
       if (this.dialogue?.active) {
         this.closeDialogue();
@@ -277,10 +353,147 @@ export class GameEngine {
     this.nearestSecondaryTarget = null;
     this.lastHudSignature = '';
     this.heldKeys.clear();
+    this.tvPlaybackTimer = 0;
+    this.tvSubtitleIndex = -1;
+    soundEngine.stopTvAudio();
     this.callbacks.onSubtitle(null);
     this.closeDialogue();
     this.emitHudSnapshot();
-    void soundEngine.playWakeUpVoice(() => this.introCutscene.timer);
+  }
+
+  public exportSaveData(): GameSaveData {
+    const safeX = this.introCutscene.active ? DESK_STAND_X : this.player.x;
+    const safeY = this.introCutscene.active ? DESK_STAND_Y : this.player.y;
+    const zoneName =
+      this.progress.currentZone === 'study' ? 'Estudo Fechado' : 'Corredor Sombrio';
+
+    return {
+      version: 1,
+      chapter: 1,
+      savedAt: Date.now(),
+      zoneName,
+      objectiveText: this.getObjectiveText(),
+      player: {
+        x: safeX,
+        y: safeY,
+        facingX: this.player.facingX,
+        facingY: this.player.facingY,
+      },
+      camera: {
+        x: this.cameraX,
+        y: this.cameraY,
+      },
+      progress: {
+        keyLocationId: this.progress.keyLocationId,
+        flashlightLocationId: this.progress.flashlightLocationId,
+        leftDrawerSearched: this.progress.leftDrawerSearched,
+        drawerSearched: this.progress.drawerSearched,
+        leftDrawerOpen: this.progress.leftDrawerOpen,
+        rightDrawerOpen: this.progress.rightDrawerOpen,
+        hasFlashlight: this.progress.hasFlashlight,
+        flashlightOn: this.progress.flashlightOn,
+        activeHandItemId: this.progress.activeHandItemId,
+        hasBackpack: this.progress.hasBackpack,
+        equippedBackpack: this.progress.equippedBackpack
+          ? { ...this.progress.equippedBackpack }
+          : null,
+        bagCapacity: this.progress.bagCapacity,
+        hasKey: this.progress.hasKey,
+        doorUnlocked: this.progress.doorUnlocked,
+        doorOpen: this.progress.doorOpen,
+        doorOpenAmount: this.progress.doorOpenAmount,
+        tvOn: false,
+        tvNewsCompleted: this.progress.tvNewsCompleted,
+        deskLampOn: this.progress.deskLampOn,
+        currentZone: this.progress.currentZone,
+        inspectedIds: Array.from(this.progress.inspectedIds),
+        npcSpokenOnce: this.progress.npcSpokenOnce,
+        npcTalkCount: this.progress.npcTalkCount,
+      },
+      hands: this.hands.map((item) => (item ? { ...item } : null)),
+      bag: this.bag.map((item) => (item ? { ...item } : null)),
+      activeHandIndex: this.activeHandIndex,
+    };
+  }
+
+  public loadSaveData(save: GameSaveData): void {
+    this.level = createLevelOne();
+    this.player = this.createInitialPlayer();
+    this.player.x = save.player.x;
+    this.player.y = save.player.y;
+    this.player.facingX = save.player.facingX;
+    this.player.facingY = save.player.facingY;
+
+    this.hands = Array.from({ length: HAND_SLOT_COUNT }, (_, idx) => {
+      const item = save.hands[idx];
+      return item ? { ...item } : null;
+    });
+    this.bag = Array.from({ length: MAX_BAG_SLOTS }, (_, idx) => {
+      const item = save.bag[idx];
+      return item ? { ...item } : null;
+    });
+    this.activeHandIndex = Math.max(0, Math.min(HAND_SLOT_COUNT - 1, save.activeHandIndex || 0));
+
+    const activeItem = this.hands[this.activeHandIndex] ?? null;
+
+    this.progress = {
+      keyLocationId: save.progress.keyLocationId,
+      flashlightLocationId: save.progress.flashlightLocationId,
+      leftDrawerSearched: Boolean(save.progress.leftDrawerSearched),
+      drawerSearched: Boolean(save.progress.drawerSearched),
+      leftDrawerOpen: Boolean(save.progress.leftDrawerOpen),
+      rightDrawerOpen: Boolean(save.progress.rightDrawerOpen),
+      hasFlashlight: Boolean(save.progress.hasFlashlight),
+      flashlightOn: activeItem?.id === 'flashlight',
+      activeHandItemId: activeItem?.id ?? null,
+      hasBackpack: Boolean(save.progress.hasBackpack),
+      equippedBackpack: save.progress.equippedBackpack
+        ? { ...save.progress.equippedBackpack }
+        : null,
+      bagCapacity: save.progress.bagCapacity ?? 0,
+      hasKey: Boolean(save.progress.hasKey),
+      doorUnlocked: Boolean(save.progress.doorUnlocked),
+      doorOpen: Boolean(save.progress.doorOpen),
+      doorOpenAmount: save.progress.doorOpenAmount ?? (save.progress.doorOpen ? 1 : 0),
+      doorShakeTimer: 0,
+      tvOn: false,
+      tvMode: 'off',
+      tvNewsCompleted: Boolean(save.progress.tvNewsCompleted),
+      tvLightSurgePhase: 'none',
+      tvLightSurgeTimer: 0,
+      deskLampOn: save.progress.deskLampOn ?? true,
+      gateTriggered: false,
+      gateTransitionTimer: 0,
+      currentZone: save.progress.currentZone === 'corridor' ? 'corridor' : 'study',
+      inspectedIds: new Set(save.progress.inspectedIds ?? []),
+      npcSpokenOnce: Boolean(save.progress.npcSpokenOnce),
+      npcTalkCount: save.progress.npcTalkCount ?? 0,
+      npcSpeechBubble: null,
+      npcSpeechTimer: 0,
+    };
+
+    this.introCutscene = {
+      active: false,
+      phase: 'none',
+      timer: 0,
+      wakeAudioTriggered: true,
+      wakeSubtitleTriggered: true,
+    };
+
+    this.inventoryOpen = false;
+    this.cameraX = save.camera?.x ?? this.player.x;
+    this.cameraY = save.camera?.y ?? this.player.y;
+    this.shakeTimer = 0;
+    this.gateWalkTimer = 0;
+    this.heldKeys.clear();
+    this.tvPlaybackTimer = 0;
+    this.tvSubtitleIndex = -1;
+    soundEngine.stopTvAudio();
+    this.callbacks.onSubtitle(null);
+    this.closeDialogue();
+    this.updateNearestInteractable();
+    this.lastHudSignature = '';
+    this.emitHudSnapshot();
   }
 
   public startLoop(): void {
@@ -304,6 +517,7 @@ export class GameEngine {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
     }
+    soundEngine.stopTvAudio();
     this.heldKeys.clear();
   }
 
@@ -524,6 +738,9 @@ export class GameEngine {
     }
 
     if (this.progress.gateTriggered) {
+      if (this.progress.tvOn) {
+        this.turnOffTv(false);
+      }
       this.progress.gateTransitionTimer += dt;
       if (this.progress.gateTransitionTimer >= 0.95) {
         this.callbacks.onLevelComplete();
@@ -535,6 +752,8 @@ export class GameEngine {
       this.updateIntroCutscene(dt);
       return;
     }
+
+    this.updateTvState(dt);
 
     if (this.dialogue?.active || this.inventoryOpen) {
       this.player.vx = 0;
@@ -635,7 +854,14 @@ export class GameEngine {
     const ic = this.introCutscene;
     ic.timer += dt;
 
-    if (!ic.wakeSubtitleTriggered && ic.timer >= 1.16) {
+    if (!ic.wakeAudioTriggered && ic.timer >= INTRO_WAKE_VOICE_START) {
+      ic.wakeAudioTriggered = true;
+      void soundEngine.playWakeUpVoice(() =>
+        Math.max(0, this.introCutscene.timer - INTRO_WAKE_VOICE_START)
+      );
+    }
+
+    if (!ic.wakeSubtitleTriggered && ic.timer >= INTRO_WAKE_VOICE_START + 1.16) {
       ic.wakeSubtitleTriggered = true;
       this.pushSubtitle('Acorda...', 2.35, 'Voz Desconhecida');
     }
@@ -656,7 +882,6 @@ export class GameEngine {
     } else if (ic.timer < INTRO_STARTLE_END) {
       if (ic.phase !== 'startled') {
         ic.phase = 'startled';
-        ic.wakeAudioTriggered = true;
         this.triggerCameraShake(0.24, 2.5);
       }
       this.player.x = DESK_SEAT_X;
@@ -710,6 +935,40 @@ export class GameEngine {
     }
 
     this.emitHudSnapshot();
+  }
+
+  public skipActiveCutscene(): void {
+    if (this.phase !== 'PLAYING') return;
+
+    if (this.introCutscene.active) {
+      this.introCutscene.active = false;
+      this.introCutscene.phase = 'none';
+      this.introCutscene.timer = INTRO_TOTAL_DURATION;
+      this.introCutscene.wakeAudioTriggered = true;
+      this.introCutscene.wakeSubtitleTriggered = true;
+
+      soundEngine.stopWakeVoice();
+      this.callbacks.onSubtitle(null);
+
+      this.player.x = DESK_STAND_X;
+      this.player.y = DESK_STAND_Y;
+      this.player.facingX = 0.32;
+      this.player.facingY = 0.95;
+      this.player.vx = 0;
+      this.player.vy = 0;
+      this.player.isMoving = false;
+
+      this.cameraX = this.player.x + this.player.facingX * 26;
+      this.cameraY = this.player.y + this.player.facingY * 20;
+
+      this.updateNearestInteractable();
+      this.emitHudSnapshot();
+      return;
+    }
+
+    if (this.progress.gateTriggered) {
+      this.callbacks.onLevelComplete();
+    }
   }
 
   private startDialogueClip(clipIndex: number): void {
@@ -856,14 +1115,124 @@ export class GameEngine {
     }
   }
 
+  private updateTvState(dt: number): void {
+    if (this.progress.tvLightSurgePhase === 'blackout') {
+      this.progress.tvLightSurgeTimer += dt;
+      if (this.progress.tvLightSurgeTimer >= TV_BLACKOUT_DURATION) {
+        this.progress.tvLightSurgePhase = 'recovering';
+        this.progress.tvLightSurgeTimer = 0;
+        soundEngine.playPowerRestore();
+      }
+    } else if (this.progress.tvLightSurgePhase === 'recovering') {
+      this.progress.tvLightSurgeTimer += dt;
+      if (this.progress.tvLightSurgeTimer >= TV_RECOVERY_DURATION) {
+        this.progress.tvLightSurgePhase = 'none';
+        this.progress.tvLightSurgeTimer = 0;
+      }
+    } else if (this.progress.tvLightSurgePhase === 'flickering') {
+      this.progress.tvLightSurgeTimer += dt;
+    }
+
+    if (!this.progress.tvOn) return;
+
+    if (this.progress.tvMode === 'news') {
+      const mediaTime = soundEngine.getTvNewsCurrentTime();
+      if (mediaTime !== null && mediaTime >= this.tvPlaybackTimer) {
+        this.tvPlaybackTimer = mediaTime;
+      } else {
+        this.tvPlaybackTimer += dt;
+      }
+
+      if (
+        this.tvPlaybackTimer >= TV_NEWS_SCARE_START &&
+        this.progress.tvLightSurgePhase !== 'flickering'
+      ) {
+        this.progress.tvLightSurgePhase = 'flickering';
+        this.progress.tvLightSurgeTimer = 0;
+      }
+
+      while (
+        this.tvSubtitleIndex + 1 < TV_NEWS_SUBTITLES.length &&
+        this.tvPlaybackTimer >= TV_NEWS_SUBTITLES[this.tvSubtitleIndex + 1].at
+      ) {
+        this.tvSubtitleIndex += 1;
+        const cue = TV_NEWS_SUBTITLES[this.tvSubtitleIndex];
+        if (!this.dialogue?.active) {
+          this.pushSubtitle(cue.text, cue.duration, cue.speaker);
+        }
+      }
+
+      if (soundEngine.isTvNewsEnded() || this.tvPlaybackTimer >= TV_NEWS_DURATION + 0.15) {
+        this.finishTvNewsBroadcast();
+      }
+      return;
+    }
+
+    if (this.progress.tvMode === 'static') {
+      this.tvPlaybackTimer += dt;
+      if (this.tvPlaybackTimer >= TV_STATIC_DURATION) {
+        this.turnOffTv(false);
+      }
+    }
+  }
+
+  private finishTvNewsBroadcast(): void {
+    if (!this.progress.tvOn || this.progress.tvMode !== 'news') return;
+    this.progress.tvOn = false;
+    this.progress.tvMode = 'off';
+    this.progress.tvNewsCompleted = true;
+    this.progress.tvLightSurgePhase = 'blackout';
+    this.progress.tvLightSurgeTimer = 0;
+    this.tvPlaybackTimer = 0;
+    this.tvSubtitleIndex = -1;
+    soundEngine.stopTvAudio();
+    soundEngine.playTvToggle(false);
+    soundEngine.playPowerBlackout();
+    this.emitHudSnapshot();
+  }
+
+  private turnOffTv(clearSubtitle = false): void {
+    this.progress.tvOn = false;
+    this.progress.tvMode = 'off';
+    if (this.progress.tvLightSurgePhase === 'flickering') {
+      this.progress.tvLightSurgePhase = 'none';
+      this.progress.tvLightSurgeTimer = 0;
+    }
+    this.tvPlaybackTimer = 0;
+    this.tvSubtitleIndex = -1;
+    soundEngine.stopTvAudio();
+    soundEngine.playTvToggle(false);
+    if (clearSubtitle) {
+      this.callbacks.onSubtitle(null);
+    }
+    this.emitHudSnapshot();
+  }
+
   private secondaryInteractWith(target: SecondaryInteractTarget): void {
     if (target.id === 'tv_power') {
       this.orientToward(248, 404, 'talk');
       this.player.interactKind = 'talk';
       this.player.interactDuration = 0.45;
       this.player.interactAnim = 1;
-      this.progress.tvOn = !this.progress.tvOn;
-      soundEngine.playTvToggle(this.progress.tvOn);
+
+      if (this.progress.tvOn) {
+        this.turnOffTv(true);
+        return;
+      }
+
+      this.progress.tvOn = true;
+      this.tvPlaybackTimer = 0;
+      this.tvSubtitleIndex = -1;
+      soundEngine.playTvToggle(true);
+
+      if (!this.progress.tvNewsCompleted) {
+        this.progress.tvMode = 'news';
+        soundEngine.startTvNews(() => this.finishTvNewsBroadcast());
+      } else {
+        this.progress.tvMode = 'static';
+        soundEngine.startTvStatic(TV_STATIC_DURATION);
+      }
+
       this.emitHudSnapshot();
       return;
     }
@@ -1229,6 +1598,7 @@ export class GameEngine {
         this.progress.gateTransitionTimer = 0;
         this.triggerCameraShake(0.75, 4.2);
         soundEngine.playGateEncounter();
+        this.emitHudSnapshot();
         break;
       }
 
@@ -1285,7 +1655,12 @@ export class GameEngine {
     const handsSig = this.hands.map((i) => i?.id ?? '-').join(',');
     const bagSig = this.bag.map((i) => i?.id ?? '-').join(',');
     const bpSig = this.progress.equippedBackpack?.id ?? 'none';
-    const sig = `${zoneName}|${objectiveText}|${handsSig}|${this.activeHandIndex}|${bagSig}|${bpSig}|${this.progress.bagCapacity}|${this.inventoryOpen}|${this.progress.flashlightOn}|${nearestId}|${this.introCutscene.active}`;
+    const cutsceneActive = this.introCutscene.active || this.progress.gateTriggered;
+    const showPresentDayTitle =
+      this.introCutscene.active &&
+      this.introCutscene.timer >= 0.45 &&
+      this.introCutscene.timer < 3.15;
+    const sig = `${zoneName}|${objectiveText}|${handsSig}|${this.activeHandIndex}|${bagSig}|${bpSig}|${this.progress.bagCapacity}|${this.inventoryOpen}|${this.progress.flashlightOn}|${nearestId}|${cutsceneActive}|${showPresentDayTitle}`;
     if (sig === this.lastHudSignature) return;
     this.lastHudSignature = sig;
 
@@ -1300,7 +1675,8 @@ export class GameEngine {
       inventoryOpen: this.inventoryOpen,
       flashlightOn: this.progress.flashlightOn,
       nearestId,
-      cutsceneActive: this.introCutscene.active,
+      cutsceneActive,
+      showPresentDayTitle,
     });
   }
 

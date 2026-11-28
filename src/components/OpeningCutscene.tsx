@@ -4,6 +4,7 @@ import { soundEngine } from '../game/audio';
 import { GameSettings, SubtitleSize } from '../game/types';
 
 const OPENING_AUDIO_URL = '/assets/aistudio/ini_do_game_4c50b511.m4a';
+const NARRATOR_LEAD_DURATION = 3.2;
 const CUTSCENE_TOTAL_DURATION = 49.4;
 
 type SpeakerRole = 'writer' | 'entity';
@@ -175,8 +176,21 @@ function getEntityScaleClass(size: SubtitleSize): string {
   }
 }
 
+function getNarratorScaleClass(size: SubtitleSize): string {
+  switch (size) {
+    case 'small':
+      return 'text-3xl sm:text-[46px] lg:text-[54px]';
+    case 'large':
+      return 'text-5xl sm:text-[66px] lg:text-[76px]';
+    case 'medium':
+    default:
+      return 'text-4xl sm:text-[56px] lg:text-[66px]';
+  }
+}
+
 export function OpeningCutscene({ settings, onComplete }: OpeningCutsceneProps) {
   const [elapsed, setElapsed] = useState(0);
+  const [showNarratorIntro, setShowNarratorIntro] = useState(false);
   const completedRef = useRef(false);
   const firedCuesRef = useRef<Set<string>>(new Set());
   const onCompleteRef = useRef(onComplete);
@@ -187,24 +201,11 @@ export function OpeningCutscene({ settings, onComplete }: OpeningCutsceneProps) 
   }, []);
 
   useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.code === 'Escape') {
-        e.preventDefault();
-        if (!completedRef.current) {
-          completedRef.current = true;
-          soundEngine.stopCutsceneEntityDrone();
-          onCompleteRef.current();
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, []);
-
-  useEffect(() => {
     let active = true;
     let rafId = 0;
     let audioPlaying = false;
+    let narratorDone = false;
+    let narratorClock = 0;
     let clockTime = 0;
     let lastPerf = performance.now();
 
@@ -216,8 +217,10 @@ export function OpeningCutscene({ settings, onComplete }: OpeningCutsceneProps) 
     audio.volume = shouldPlaySpeech
       ? Math.max(0, Math.min(1, settings.speechVolume))
       : 0;
+    soundEngine.syncMediaElement(audio, settings.monoAudio);
 
-    if (shouldPlaySpeech) {
+    const startDialogueAudio = () => {
+      if (!shouldPlaySpeech) return;
       void audio
         .play()
         .then(() => {
@@ -226,13 +229,29 @@ export function OpeningCutscene({ settings, onComplete }: OpeningCutsceneProps) 
         .catch(() => {
           audioPlaying = false;
         });
-    }
+    };
 
     const tick = (now: number) => {
       if (!active || completedRef.current) return;
 
       const dt = Math.min(0.08, Math.max(0, (now - lastPerf) / 1000));
       lastPerf = now;
+
+      if (!narratorDone) {
+        narratorClock += dt;
+        const visible = narratorClock >= 0.2 && narratorClock < 2.65;
+        setShowNarratorIntro(visible);
+
+        if (narratorClock >= NARRATOR_LEAD_DURATION) {
+          narratorDone = true;
+          setShowNarratorIntro(false);
+          clockTime = 0;
+          startDialogueAudio();
+        } else {
+          rafId = requestAnimationFrame(tick);
+          return;
+        }
+      }
 
       if (audioPlaying && !audio.paused && !audio.ended) {
         clockTime = audio.currentTime;
@@ -268,7 +287,7 @@ export function OpeningCutscene({ settings, onComplete }: OpeningCutsceneProps) 
       audio.currentTime = 0;
       soundEngine.stopCutsceneEntityDrone();
     };
-  }, [settings.mode, settings.speechVolume]);
+  }, [settings.mode, settings.speechVolume, settings.monoAudio]);
 
   const activeLine = useMemo(
     () => CUTSCENE_LINES.find((line) => elapsed >= line.start && elapsed <= line.end) ?? null,
@@ -292,17 +311,31 @@ export function OpeningCutscene({ settings, onComplete }: OpeningCutsceneProps) 
         }}
       />
 
-      <div className="relative z-10 flex w-full max-w-3xl items-center justify-center">
+      <div className="relative z-10 flex w-full max-w-4xl items-center justify-center">
         <AnimatePresence mode="wait">
-          {activeLine &&
+          {showNarratorIntro ? (
+            <motion.p
+              key="narrator-one-month-ago"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.45, ease: 'easeInOut' }}
+              className={`font-narrator w-full pl-[0.04em] leading-tight italic tracking-[0.04em] text-[#e8e2d5] drop-shadow-[0_2px_16px_rgba(255,245,225,0.14)] ${getNarratorScaleClass(
+                settings.subtitleSize
+              )}`}
+            >
+              Um mês atrás
+            </motion.p>
+          ) : (
+            activeLine &&
             (activeLine.speaker === 'writer' ? (
               <motion.p
                 key={activeLine.id}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
                 transition={{ duration: 0.24, ease: 'easeOut' }}
-                className={`font-writer leading-snug font-normal text-[#f4efe6] drop-shadow-[0_2px_14px_rgba(255,245,225,0.14)] text-balance ${getWriterScaleClass(
+                className={`font-writer w-full leading-tight font-normal text-[#f4efe6] drop-shadow-[0_2px_14px_rgba(255,245,225,0.14)] text-balance ${getWriterScaleClass(
                   settings.subtitleSize
                 )}`}
               >
@@ -315,13 +348,14 @@ export function OpeningCutscene({ settings, onComplete }: OpeningCutsceneProps) 
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.97 }}
                 transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-                className={`font-entity leading-tight font-bold tracking-[0.04em] text-[#e54b40] drop-shadow-[0_0_24px_rgba(190,26,22,0.65)] text-balance ${getEntityScaleClass(
+                className={`font-entity w-full leading-tight font-bold tracking-[0.04em] text-[#e54b40] drop-shadow-[0_0_24px_rgba(190,26,22,0.65)] text-balance ${getEntityScaleClass(
                   settings.subtitleSize
                 )}`}
               >
                 {activeLine.text}
               </motion.p>
-            ))}
+            ))
+          )}
         </AnimatePresence>
       </div>
     </div>

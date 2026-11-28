@@ -1,29 +1,28 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { formatKeyCode } from '../game/settings';
 import { KeyBindings } from '../game/types';
 
 interface PauseModalProps {
-  muted: boolean;
   keyBindings: KeyBindings;
   disableEscClose?: boolean;
   onResume: () => void;
+  onSaveGame: () => boolean;
   onRestart: () => void;
   onOpenSettings: () => void;
-  onToggleMute: () => void;
   onTitle: () => void;
 }
 
 export function PauseModal({
-  muted,
   keyBindings,
   disableEscClose = false,
   onResume,
+  onSaveGame,
   onRestart,
   onOpenSettings,
-  onToggleMute,
   onTitle,
 }: PauseModalProps) {
+  const [savedNotice, setSavedNotice] = useState(false);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (disableEscClose) return;
@@ -36,10 +35,11 @@ export function PauseModal({
     return () => window.removeEventListener('keydown', onKey);
   }, [onResume, disableEscClose, keyBindings.pause]);
 
-  const moveKeys = `${formatKeyCode(keyBindings.moveUp, true)}${formatKeyCode(
-    keyBindings.moveLeft,
-    true
-  )}${formatKeyCode(keyBindings.moveDown, true)}${formatKeyCode(keyBindings.moveRight, true)}`;
+  useEffect(() => {
+    if (!savedNotice) return;
+    const timer = window.setTimeout(() => setSavedNotice(false), 2000);
+    return () => window.clearTimeout(timer);
+  }, [savedNotice]);
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-[#040508]/82 p-6">
@@ -52,11 +52,6 @@ export function PauseModal({
         <h2 className="font-display text-2xl font-semibold tracking-wide text-[#f2ebde]">
           Investigação Pausada
         </h2>
-        <p className="mt-1.5 text-xs text-[#8f99a8]">
-          {moveKeys} Mover · {formatKeyCode(keyBindings.interact, true)} Interagir ·{' '}
-          {formatKeyCode(keyBindings.secondaryInteract, true)} Aparelhos ·{' '}
-          {formatKeyCode(keyBindings.inventory, true)} Inventário
-        </p>
 
         <div className="mt-6 flex flex-col gap-2.5">
           <button
@@ -65,6 +60,20 @@ export function PauseModal({
             className="w-full cursor-pointer rounded-sm border border-[#d8a24a]/55 bg-[#1a1611] px-4 py-2.5 text-sm font-medium text-[#f3dfb8] transition-colors duration-150 hover:bg-[#261f16]"
           >
             Continuar
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const ok = onSaveGame();
+              if (ok) setSavedNotice(true);
+            }}
+            className={`w-full cursor-pointer rounded-sm border px-4 py-2.5 text-sm font-medium transition-colors duration-150 ${
+              savedNotice
+                ? 'border-[#d8a24a]/70 bg-[#221c13] text-[#f5dfb4]'
+                : 'border-white/12 bg-[#141923] text-[#d4dce7] hover:border-[#d8a24a]/45 hover:bg-[#1a202c]'
+            }`}
+          >
+            {savedNotice ? 'Progresso Salvo' : 'Salvar Jogo'}
           </button>
           <button
             type="button"
@@ -79,13 +88,6 @@ export function PauseModal({
             className="w-full cursor-pointer rounded-sm border border-white/12 bg-[#141923] px-4 py-2.5 text-sm font-medium text-[#d4dce7] transition-colors duration-150 hover:border-white/25 hover:bg-[#1a202c]"
           >
             Configurações
-          </button>
-          <button
-            type="button"
-            onClick={onToggleMute}
-            className="w-full cursor-pointer rounded-sm border border-white/12 bg-[#141923] px-4 py-2.5 text-sm font-medium text-[#d4dce7] transition-colors duration-150 hover:border-white/25 hover:bg-[#1a202c]"
-          >
-            {muted ? 'Ativar Áudio' : 'Silenciar Áudio'}
           </button>
           <button
             type="button"

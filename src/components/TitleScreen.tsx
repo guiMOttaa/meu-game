@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, Settings } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 import { motion } from 'motion/react';
 import studyBackdropImg from '../assets/images/study_title_backdrop_clean_1795749762511.jpg';
 import { soundEngine } from '../game/audio';
-import { GameSettings } from '../game/types';
+import { GameSaveData, GameSettings } from '../game/types';
 import { SettingsModal } from './SettingsModal';
 
 const TITLE_THEME_URL =
@@ -11,8 +11,10 @@ const TITLE_THEME_URL =
 
 interface TitleScreenProps {
   settings: GameSettings;
+  savedGame: GameSaveData | null;
   onUpdateSettings: (next: GameSettings) => void;
   onStart: () => void;
+  onLoadGame: () => void;
   onBackToChapters?: () => void;
   animateFxEntry?: boolean;
 }
@@ -96,8 +98,10 @@ function computeHorrorLampPower(t: number): number {
 
 export function TitleScreen({
   settings,
+  savedGame,
   onUpdateSettings,
   onStart,
+  onLoadGame,
   onBackToChapters,
   animateFxEntry = false,
 }: TitleScreenProps) {
@@ -122,8 +126,13 @@ export function TitleScreen({
 
     const tryPlay = () => {
       if (!active) return;
+      soundEngine.syncMediaElement(audio, settings.monoAudio);
       void audio.play().catch(() => {});
     };
+
+    if (settings.monoAudio) {
+      soundEngine.syncMediaElement(audio, true);
+    }
 
     void audio.play().catch(() => {
       const unlock = (ev: Event) => {
@@ -151,24 +160,12 @@ export function TitleScreen({
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.volume = Math.max(0, Math.min(1, 0.34 * settings.musicVolume));
+      soundEngine.syncMediaElement(audioRef.current, settings.monoAudio);
       if (settings.musicVolume > 0 && audioRef.current.paused) {
         void audioRef.current.play().catch(() => {});
       }
     }
-  }, [settings.musicVolume]);
-
-  // Keyboard shortcuts (Enter / Space to start)
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (settingsOpen) return;
-      if (e.code === 'Enter' || e.code === 'Space') {
-        e.preventDefault();
-        onStart();
-      }
-    };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [onStart, settingsOpen]);
+  }, [settings.musicVolume, settings.monoAudio]);
 
   // Live atmospheric overlay: Rain in the Gothic window, periodic Thunder/Lightning flash into the room,
   // and horror-style flickering brass desk lamp + floating dust motes.
@@ -478,7 +475,7 @@ export function TitleScreen({
         />
       </div>
 
-      {/* Top bar: Back to chapters on left, Settings gear on right */}
+      {/* Top bar: Back to chapters on left */}
       <div className="relative z-10 flex items-center justify-between p-5 sm:p-7">
         {onBackToChapters ? (
           <button
@@ -496,23 +493,10 @@ export function TitleScreen({
         ) : (
           <div />
         )}
-
-        <button
-          type="button"
-          onClick={() => {
-            soundEngine.playUiClick();
-            setSettingsOpen(true);
-          }}
-          aria-label="Configurações"
-          title="Configurações"
-          className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-sm border border-white/15 bg-[#0c0f14]/85 text-[#c2cad6] transition-colors duration-150 hover:border-[#d8a24a]/55 hover:text-[#f2ece1] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e6b665]"
-        >
-          <Settings className="h-4 w-4" />
-        </button>
       </div>
 
-      {/* Main Title Lockup */}
-      <div className="relative z-10 flex flex-1 items-center px-8 pb-14 sm:px-16 lg:px-24">
+      {/* Main Title Lockup (raised slightly to accommodate menu options cleanly) */}
+      <div className="relative z-10 flex flex-1 items-start px-8 pt-2 pb-10 sm:px-16 sm:pt-5 lg:px-24 lg:pt-8">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -520,12 +504,12 @@ export function TitleScreen({
           className="max-w-xl"
         >
           <svg
-            width="44"
-            height="44"
+            width="42"
+            height="42"
             viewBox="0 0 44 44"
             fill="none"
             aria-hidden="true"
-            className="mb-6 text-[#d8a24a]"
+            className="mb-4 text-[#d8a24a]"
           >
             <rect
               x="22"
@@ -550,28 +534,72 @@ export function TitleScreen({
             <circle cx="22" cy="22" r="2.5" fill="currentColor" fillOpacity="0.85" />
           </svg>
 
-          <p className="mb-3 text-xs font-medium tracking-[0.22em] text-[#b89b6d] uppercase">
-            Primeira Investigação
+          <p className="mb-2 text-xs font-medium tracking-[0.22em] text-[#b89b6d] uppercase">
+            Capítulo 1
           </p>
 
           <h1 className="font-display text-4xl font-semibold tracking-wide text-[#f0e9dc] sm:text-5xl lg:text-6xl text-balance">
             Limiar das Cinzas
           </h1>
 
-          <p className="mt-5 max-w-md text-sm leading-relaxed text-[#b2bac6] sm:text-base">
+          <p className="mt-4 max-w-md text-sm leading-relaxed text-[#b2bac6] sm:text-base">
             Preso em um estudo silencioso cercado de livros e sombras, vasculhe cada canto
             em busca da chave oculta e descubra o que o aguarda além da porta trancada.
           </p>
 
-          <div className="mt-9">
+          <nav aria-label="Menu do capítulo" className="mt-7 flex flex-col items-start gap-2.5">
             <button
               type="button"
               onClick={onStart}
-              className="cursor-pointer rounded-sm border border-[#d8a24a]/60 bg-[#1a1611] px-7 py-3 text-sm font-medium tracking-wide text-[#f3dfb8] transition-colors duration-150 hover:border-[#e6b665] hover:bg-[#261f16] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e6b665] whitespace-nowrap shrink-0"
+              className="cursor-pointer bg-transparent py-1 text-left font-display text-lg font-medium tracking-wider text-[#f3dfb8] transition-all duration-150 hover:translate-x-1.5 hover:text-[#ffe8bc] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e6b665] sm:text-xl"
             >
-              Iniciar Investigação
+              Novo Jogo
             </button>
-          </div>
+
+            <button
+              type="button"
+              disabled={!savedGame}
+              onClick={() => {
+                if (savedGame) {
+                  onLoadGame();
+                }
+              }}
+              className={`flex items-baseline gap-3 bg-transparent py-1 text-left font-display text-lg font-medium tracking-wider transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e6b665] sm:text-xl ${
+                savedGame
+                  ? 'cursor-pointer text-[#e6dfd3] hover:translate-x-1.5 hover:text-[#ffe8bc]'
+                  : 'cursor-not-allowed text-[#5c6472]'
+              }`}
+            >
+              <span>Carregar</span>
+              {savedGame && (
+                <span className="font-sans text-xs font-normal tracking-normal text-[#8f99a8]">
+                  {savedGame.zoneName}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                soundEngine.playUiClick();
+                setSettingsOpen(true);
+              }}
+              className="cursor-pointer bg-transparent py-1 text-left font-display text-lg font-medium tracking-wider text-[#e6dfd3] transition-all duration-150 hover:translate-x-1.5 hover:text-[#ffe8bc] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e6b665] sm:text-xl"
+            >
+              Configuração
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                soundEngine.playUiClick();
+                onBackToChapters?.();
+              }}
+              className="cursor-pointer bg-transparent py-1 text-left font-display text-lg font-medium tracking-wider text-[#aeb6c4] transition-all duration-150 hover:translate-x-1.5 hover:text-[#f0e9dc] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e6b665] sm:text-xl"
+            >
+              Sair do Jogo
+            </button>
+          </nav>
         </motion.div>
       </div>
 

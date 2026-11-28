@@ -29,6 +29,7 @@ export const NPC_VOICE_CLIPS: VoiceClipSpec[] = [
 
 const USER_VOICE_URL = '/assets/aistudio/Grava__o_97704bb7.m4a';
 const WAKE_AUDIO_URL = '/assets/aistudio/1127__1__45f89282.MP3';
+const TV_NEWS_AUDIO_URL = '/assets/aistudio/tv_fa2ac788.MP3';
 
 class SoundEngine {
   private ctx: AudioContext | null = null;
@@ -52,10 +53,42 @@ class SoundEngine {
   private wakeCleanupTimer: number | null = null;
   private cutsceneDroneNodes: AudioNode[] = [];
   private cutsceneDroneGain: GainNode | null = null;
+  private tvAudioEl: HTMLAudioElement | null = null;
+  private tvNewsEndedCb: (() => void) | null = null;
+  private tvStaticNodes: AudioNode[] = [];
+  private tvStaticGain: GainNode | null = null;
+  private tvStaticTimer: number | null = null;
 
   private musicVolume = 0.75;
   private speechVolume = 0.9;
   private voiceEnabled = true;
+  private monoAudio = false;
+  private outputNode: GainNode | null = null;
+  private mediaElementSources = new WeakMap<HTMLAudioElement, MediaElementAudioSourceNode>();
+
+  private applyChannelRouting(ctx: AudioContext): void {
+    if (!this.outputNode) return;
+    if (this.monoAudio) {
+      this.outputNode.channelCount = 1;
+      this.outputNode.channelCountMode = 'explicit';
+      this.outputNode.channelInterpretation = 'speakers';
+    } else {
+      const maxCh = Math.max(2, ctx.destination.maxChannelCount || 2);
+      this.outputNode.channelCount = Math.min(2, maxCh);
+      this.outputNode.channelCountMode = 'max';
+      this.outputNode.channelInterpretation = 'speakers';
+    }
+  }
+
+  private getOutputDestination(ctx: AudioContext): AudioNode {
+    if (!this.outputNode) {
+      this.outputNode = ctx.createGain();
+      this.outputNode.gain.value = 1;
+      this.applyChannelRouting(ctx);
+      this.outputNode.connect(ctx.destination);
+    }
+    return this.outputNode;
+  }
 
   private ensureContext(): AudioContext | null {
     if (this.muted) return null;
@@ -67,8 +100,11 @@ class SoundEngine {
         this.ctx = new AudioCtx();
       }
     }
-    if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume().catch(() => {});
+    if (this.ctx) {
+      this.getOutputDestination(this.ctx);
+      if (this.ctx.state === 'suspended') {
+        this.ctx.resume().catch(() => {});
+      }
     }
     return this.ctx;
   }
@@ -81,10 +117,17 @@ class SoundEngine {
     musicVolume: number;
     speechVolume: number;
     mode: 'dubbed' | 'subtitled';
+    monoAudio?: boolean;
   }): void {
     this.musicVolume = Math.max(0, Math.min(1, settings.musicVolume));
     this.speechVolume = Math.max(0, Math.min(1, settings.speechVolume));
     this.voiceEnabled = settings.mode === 'dubbed';
+    if (typeof settings.monoAudio === 'boolean') {
+      this.monoAudio = settings.monoAudio;
+      if (this.ctx) {
+        this.applyChannelRouting(this.ctx);
+      }
+    }
 
     if (this.ambienceGain && this.ctx) {
       this.ambienceGain.gain.setTargetAtTime(
@@ -96,6 +139,38 @@ class SoundEngine {
     if (!this.voiceEnabled || this.speechVolume <= 0.005) {
       this.stopActiveVoice();
     }
+    this.updateTvAudioLevels();
+  }
+
+  public syncMediaElement(audio: HTMLAudioElement | null, forceMono = this.monoAudio): void {
+    if (!audio || typeof window === 'undefined') return;
+    const existingSource = this.mediaElementSources.get(audio);
+    if (!forceMono && !existingSource) {
+      return;
+    }
+    let ctx = this.ctx;
+    if (!ctx) {
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+      ctx = new AudioCtx();
+      this.ctx = ctx;
+    }
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+    const dest = this.getOutputDestination(ctx);
+    if (!existingSource) {
+      try {
+        const source = ctx.createMediaElementSource(audio);
+        source.connect(dest);
+        this.mediaElementSources.set(audio, source);
+      } catch {
+        // Ignore if browser cannot capture media element
+      }
+    }
+    this.applyChannelRouting(ctx);
   }
 
   public setMuted(mute: boolean): void {
@@ -111,6 +186,7 @@ class SoundEngine {
       this.stopActiveVoice();
       this.stopCutsceneEntityDrone();
     }
+    this.updateTvAudioLevels();
   }
 
   public toggleMute(): boolean {
@@ -282,7 +358,7 @@ class SoundEngine {
       airFilter.connect(airGain);
       airGain.connect(masterGain);
 
-      masterGain.connect(ctx.destination);
+      masterGain.connect(this.getOutputDestination(ctx));
 
       oscSub.start();
       oscDark.start();
@@ -309,6 +385,7 @@ class SoundEngine {
   public stopAmbience(): void {
     this.stopActiveVoice();
     this.stopCutsceneEntityDrone();
+    this.stopTvAudio();
     if (!this.ambienceRunning) return;
     this.ambienceTimers.forEach((id) => window.clearInterval(id));
     this.ambienceTimers = [];
@@ -345,7 +422,7 @@ class SoundEngine {
     gain.gain.exponentialRampToValueAtTime(0.0005, now + 0.9);
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(this.getOutputDestination(ctx));
     osc.start(now);
     osc.stop(now + 0.95);
   }
@@ -382,7 +459,7 @@ class SoundEngine {
 
     soleSrc.connect(soleFilter);
     soleFilter.connect(soleGain);
-    soleGain.connect(ctx.destination);
+    soleGain.connect(this.getOutputDestination(ctx));
 
     // Subtle spatial stone corridor tail
     if (surface === 'stone') {
@@ -392,7 +469,7 @@ class SoundEngine {
       wetGain.gain.value = 0.18;
       soleGain.connect(convolver);
       convolver.connect(wetGain);
-      wetGain.connect(ctx.destination);
+      wetGain.connect(this.getOutputDestination(ctx));
     }
 
     soleSrc.start(now, offset, dur + 0.02);
@@ -409,7 +486,7 @@ class SoundEngine {
     heelGain.gain.exponentialRampToValueAtTime(0.001, now + 0.085);
 
     heel.connect(heelGain);
-    heelGain.connect(ctx.destination);
+    heelGain.connect(this.getOutputDestination(ctx));
     heel.start(now);
     heel.stop(now + 0.095);
   }
@@ -427,7 +504,7 @@ class SoundEngine {
     knockGain.gain.setValueAtTime(0.09, now);
     knockGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
     knock.connect(knockGain);
-    knockGain.connect(ctx.destination);
+    knockGain.connect(this.getOutputDestination(ctx));
     knock.start(now);
     knock.stop(now + 0.055);
 
@@ -446,7 +523,7 @@ class SoundEngine {
 
     slide.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(this.getOutputDestination(ctx));
     slide.start(now + 0.03, 0.2, 0.32);
   }
 
@@ -468,7 +545,7 @@ class SoundEngine {
     woodGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
     wood.connect(woodFilter);
     woodFilter.connect(woodGain);
-    woodGain.connect(ctx.destination);
+    woodGain.connect(this.getOutputDestination(ctx));
     wood.start(now);
     wood.stop(now + 0.22);
 
@@ -501,7 +578,7 @@ class SoundEngine {
 
       src.connect(filter);
       filter.connect(g);
-      g.connect(ctx.destination);
+      g.connect(this.getOutputDestination(ctx));
       src.start(now + offset);
     });
 
@@ -513,7 +590,7 @@ class SoundEngine {
     thumpGain.gain.setValueAtTime(0.075, now + 0.19);
     thumpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.29);
     thump.connect(thumpGain);
-    thumpGain.connect(ctx.destination);
+    thumpGain.connect(this.getOutputDestination(ctx));
     thump.start(now + 0.19);
     thump.stop(now + 0.3);
   }
@@ -537,7 +614,7 @@ class SoundEngine {
 
     src.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(this.getOutputDestination(ctx));
     src.start(now, 0.35, 0.25);
   }
 
@@ -555,7 +632,7 @@ class SoundEngine {
       gain.gain.setValueAtTime(0.075, now + idx * 0.045);
       gain.gain.exponentialRampToValueAtTime(0.0008, now + idx * 0.045 + 0.3);
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.getOutputDestination(ctx));
       osc.start(now + idx * 0.045);
       osc.stop(now + idx * 0.045 + 0.32);
     });
@@ -575,7 +652,7 @@ class SoundEngine {
       gain.gain.setValueAtTime(0.14, now + offset);
       gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.085);
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.getOutputDestination(ctx));
       osc.start(now + offset);
       osc.stop(now + offset + 0.09);
     });
@@ -594,7 +671,7 @@ class SoundEngine {
     clickGain.gain.setValueAtTime(0.1, now);
     clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.065);
     click.connect(clickGain);
-    clickGain.connect(ctx.destination);
+    clickGain.connect(this.getOutputDestination(ctx));
     click.start(now);
     click.stop(now + 0.07);
 
@@ -612,7 +689,7 @@ class SoundEngine {
     creakGain.gain.exponentialRampToValueAtTime(0.001, now + 0.58);
     creak.connect(creakFilter);
     creakFilter.connect(creakGain);
-    creakGain.connect(ctx.destination);
+    creakGain.connect(this.getOutputDestination(ctx));
     creak.start(now + 0.08);
     creak.stop(now + 0.6);
   }
@@ -635,7 +712,7 @@ class SoundEngine {
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
     slide.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(this.getOutputDestination(ctx));
     slide.start(now);
     slide.stop(now + 0.16);
   }
@@ -659,7 +736,7 @@ class SoundEngine {
     creakGain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
     creak.connect(creakFilter);
     creakFilter.connect(creakGain);
-    creakGain.connect(ctx.destination);
+    creakGain.connect(this.getOutputDestination(ctx));
     creak.start(now);
     creak.stop(now + 0.28);
 
@@ -671,7 +748,7 @@ class SoundEngine {
     latchGain.gain.setValueAtTime(0.11, now + 0.23);
     latchGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
     latch.connect(latchGain);
-    latchGain.connect(ctx.destination);
+    latchGain.connect(this.getOutputDestination(ctx));
     latch.start(now + 0.23);
     latch.stop(now + 0.36);
   }
@@ -689,7 +766,7 @@ class SoundEngine {
     gain.gain.setValueAtTime(0.045, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.036);
     osc.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(this.getOutputDestination(ctx));
     osc.start(now);
     osc.stop(now + 0.04);
   }
@@ -708,7 +785,7 @@ class SoundEngine {
     clackGain.gain.setValueAtTime(0.09, now);
     clackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
     clack.connect(clackGain);
-    clackGain.connect(ctx.destination);
+    clackGain.connect(this.getOutputDestination(ctx));
     clack.start(now);
     clack.stop(now + 0.055);
 
@@ -731,7 +808,7 @@ class SoundEngine {
       g.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
       src.connect(filter);
       filter.connect(g);
-      g.connect(ctx.destination);
+      g.connect(this.getOutputDestination(ctx));
       src.start(now + 0.03);
     } else {
       // CRT tube discharge drop
@@ -743,10 +820,225 @@ class SoundEngine {
       dropGain.gain.setValueAtTime(0.045, now + 0.02);
       dropGain.gain.exponentialRampToValueAtTime(0.001, now + 0.17);
       drop.connect(dropGain);
-      dropGain.connect(ctx.destination);
+      dropGain.connect(this.getOutputDestination(ctx));
       drop.start(now + 0.02);
       drop.stop(now + 0.18);
     }
+  }
+
+  private updateTvAudioLevels(): void {
+    if (this.tvAudioEl) {
+      const audible = !this.muted && this.voiceEnabled && this.speechVolume > 0.005;
+      this.tvAudioEl.volume = audible ? Math.max(0, Math.min(1, this.speechVolume)) : 0;
+      this.syncMediaElement(this.tvAudioEl, this.monoAudio);
+    }
+    if (this.tvStaticGain && this.ctx) {
+      this.tvStaticGain.gain.setTargetAtTime(
+        this.muted ? 0 : 0.16 * Math.max(0.2, this.musicVolume),
+        this.ctx.currentTime,
+        0.06
+      );
+    }
+  }
+
+  public startTvNews(onEnded: () => void): void {
+    this.stopTvAudio();
+    if (typeof Audio === 'undefined') return;
+
+    const audio = new Audio(TV_NEWS_AUDIO_URL);
+    audio.preload = 'auto';
+    this.tvAudioEl = audio;
+    this.tvNewsEndedCb = onEnded;
+    this.updateTvAudioLevels();
+
+    audio.addEventListener('ended', () => {
+      if (this.tvAudioEl !== audio) return;
+      const cb = this.tvNewsEndedCb;
+      this.stopTvAudio();
+      cb?.();
+    });
+
+    void audio.play().catch(() => {
+      // Fallback timeline in GameEngine handles completion even if blocked
+    });
+  }
+
+  public startTvStatic(durationSec = 2.45): void {
+    this.stopTvAudio();
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const len = Math.floor(ctx.sampleRate * Math.max(0.6, durationSec + 0.15));
+    const buffer = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+
+    let last = 0;
+    for (let i = 0; i < len; i++) {
+      const white = Math.random() * 2 - 1;
+      last = last * 0.35 + white * 0.65;
+      const pop = Math.random() < 0.0028 ? (Math.random() > 0.5 ? 0.9 : -0.9) : 0;
+      data[i] = Math.max(-1, Math.min(1, last * 0.72 + pop * 0.45));
+    }
+
+    const noiseSrc = ctx.createBufferSource();
+    noiseSrc.buffer = buffer;
+
+    const bandpass = ctx.createBiquadFilter();
+    bandpass.type = 'bandpass';
+    bandpass.frequency.value = 1850;
+    bandpass.Q.value = 0.65;
+
+    const humOsc = ctx.createOscillator();
+    humOsc.type = 'sawtooth';
+    humOsc.frequency.value = 60;
+    const humFilter = ctx.createBiquadFilter();
+    humFilter.type = 'lowpass';
+    humFilter.frequency.value = 180;
+    const humGain = ctx.createGain();
+    humGain.gain.value = 0.14;
+
+    const masterGain = ctx.createGain();
+    const targetGain = this.muted ? 0 : 0.16 * Math.max(0.2, this.musicVolume);
+    masterGain.gain.setValueAtTime(0.001, now);
+    masterGain.gain.linearRampToValueAtTime(targetGain, now + 0.08);
+    masterGain.gain.setValueAtTime(targetGain, now + Math.max(0.15, durationSec - 0.14));
+    masterGain.gain.exponentialRampToValueAtTime(0.0008, now + durationSec);
+
+    noiseSrc.connect(bandpass);
+    bandpass.connect(masterGain);
+    humOsc.connect(humFilter);
+    humFilter.connect(humGain);
+    humGain.connect(masterGain);
+    masterGain.connect(this.getOutputDestination(ctx));
+
+    noiseSrc.start(now, 0, durationSec);
+    humOsc.start(now);
+    humOsc.stop(now + durationSec + 0.04);
+
+    this.tvStaticGain = masterGain;
+    this.tvStaticNodes = [noiseSrc, humOsc, masterGain];
+    this.tvStaticTimer = window.setTimeout(() => {
+      this.stopTvStaticNodes();
+    }, (durationSec + 0.15) * 1000);
+  }
+
+  private stopTvStaticNodes(): void {
+    if (this.tvStaticTimer !== null) {
+      window.clearTimeout(this.tvStaticTimer);
+      this.tvStaticTimer = null;
+    }
+    for (const node of this.tvStaticNodes) {
+      try {
+        if ('stop' in node && typeof (node as OscillatorNode).stop === 'function') {
+          (node as OscillatorNode).stop();
+        }
+        node.disconnect();
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+    this.tvStaticNodes = [];
+    this.tvStaticGain = null;
+  }
+
+  public pauseTvAudio(): void {
+    if (this.tvAudioEl && !this.tvAudioEl.paused && !this.tvAudioEl.ended) {
+      this.tvAudioEl.pause();
+    }
+    this.stopTvStaticNodes();
+  }
+
+  public resumeTvNews(): void {
+    if (this.tvAudioEl && this.tvAudioEl.paused && !this.tvAudioEl.ended) {
+      this.updateTvAudioLevels();
+      void this.tvAudioEl.play().catch(() => {});
+    }
+  }
+
+  public stopTvAudio(): void {
+    this.stopTvStaticNodes();
+    this.tvNewsEndedCb = null;
+    if (this.tvAudioEl) {
+      try {
+        this.tvAudioEl.pause();
+        this.tvAudioEl.currentTime = 0;
+      } catch {
+        // Ignore cleanup errors
+      }
+      this.tvAudioEl = null;
+    }
+  }
+
+  public getTvNewsCurrentTime(): number | null {
+    if (!this.tvAudioEl) return null;
+    return this.tvAudioEl.paused ? null : this.tvAudioEl.currentTime;
+  }
+
+  public isTvNewsEnded(): boolean {
+    return Boolean(this.tvAudioEl?.ended);
+  }
+
+  public playPowerBlackout(): void {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const volScale = Math.max(0.25, this.musicVolume);
+
+    // Breaker relay clack
+    const clack = ctx.createOscillator();
+    const clackGain = ctx.createGain();
+    clack.type = 'triangle';
+    clack.frequency.setValueAtTime(310, now);
+    clack.frequency.exponentialRampToValueAtTime(52, now + 0.09);
+    clackGain.gain.setValueAtTime(0.11 * volScale, now);
+    clackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+    clack.connect(clackGain);
+    clackGain.connect(this.getOutputDestination(ctx));
+    clack.start(now);
+    clack.stop(now + 0.11);
+
+    // Dying electrical hum drop
+    const hum = ctx.createOscillator();
+    const humFilter = ctx.createBiquadFilter();
+    const humGain = ctx.createGain();
+    hum.type = 'sawtooth';
+    hum.frequency.setValueAtTime(120, now);
+    hum.frequency.exponentialRampToValueAtTime(34, now + 0.55);
+    humFilter.type = 'lowpass';
+    humFilter.frequency.value = 240;
+    humGain.gain.setValueAtTime(0.065 * volScale, now);
+    humGain.gain.exponentialRampToValueAtTime(0.0008, now + 0.58);
+    hum.connect(humFilter);
+    humFilter.connect(humGain);
+    humGain.connect(this.getOutputDestination(ctx));
+    hum.start(now);
+    hum.stop(now + 0.6);
+  }
+
+  public playPowerRestore(): void {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const volScale = Math.max(0.25, this.musicVolume);
+
+    // Soft filament warm-up swell + gentle flicker pulse
+    const hum = ctx.createOscillator();
+    const filter = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+    hum.type = 'sine';
+    hum.frequency.setValueAtTime(58, now);
+    hum.frequency.linearRampToValueAtTime(60, now + 0.8);
+    filter.type = 'lowpass';
+    filter.frequency.value = 220;
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.045 * volScale, now + 0.18);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.95);
+    hum.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.getOutputDestination(ctx));
+    hum.start(now);
+    hum.stop(now + 1.0);
   }
 
   public stopWakeVoice(): void {
@@ -837,7 +1129,7 @@ class SoundEngine {
     masterOut.gain.setValueAtTime(vol, now);
     masterOut.gain.setValueAtTime(vol, now + playSpan + 1.4);
     masterOut.gain.linearRampToValueAtTime(0.0005, now + tailTotal);
-    masterOut.connect(ctx.destination);
+    masterOut.connect(this.getOutputDestination(ctx));
 
     // Dry in-room path
     const dryGain = ctx.createGain();
@@ -948,7 +1240,7 @@ class SoundEngine {
 
     const speechOut = ctx.createGain();
     speechOut.gain.value = this.speechVolume;
-    speechOut.connect(ctx.destination);
+    speechOut.connect(this.getOutputDestination(ctx));
 
     const dryGain = ctx.createGain();
     dryGain.gain.setValueAtTime(0.001, now);
@@ -1016,7 +1308,7 @@ class SoundEngine {
 
       osc.connect(filter);
       filter.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.getOutputDestination(ctx));
       osc.start(now);
       osc.stop(now + 2.1);
     });
@@ -1048,7 +1340,7 @@ class SoundEngine {
 
       osc.connect(filter);
       filter.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.getOutputDestination(ctx));
 
       osc.start(now + offset);
       osc.stop(now + offset + 0.17);
@@ -1068,7 +1360,7 @@ class SoundEngine {
     const wetGain = ctx.createGain();
     wetGain.gain.value = 0.45;
     reverb.connect(wetGain);
-    wetGain.connect(ctx.destination);
+    wetGain.connect(this.getOutputDestination(ctx));
 
     // Deep sub-bass pressure closing in
     const sub = ctx.createOscillator();
@@ -1080,7 +1372,7 @@ class SoundEngine {
     subGain.gain.linearRampToValueAtTime(0.24, now + 0.55);
     subGain.gain.exponentialRampToValueAtTime(0.001, now + 2.6);
     sub.connect(subGain);
-    subGain.connect(ctx.destination);
+    subGain.connect(this.getOutputDestination(ctx));
     sub.start(now);
     sub.stop(now + 2.65);
 
@@ -1106,7 +1398,7 @@ class SoundEngine {
 
       osc.connect(filter);
       filter.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.getOutputDestination(ctx));
       gain.connect(reverb);
       osc.start(now);
       osc.stop(now + 2.65);
@@ -1128,7 +1420,7 @@ class SoundEngine {
 
     air.connect(airFilter);
     airFilter.connect(airGain);
-    airGain.connect(ctx.destination);
+    airGain.connect(this.getOutputDestination(ctx));
     airGain.connect(reverb);
     air.start(now, 0.1, 2.45);
   }
@@ -1159,10 +1451,10 @@ class SoundEngine {
 
     air.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(this.getOutputDestination(ctx));
     gain.connect(reverb);
     reverb.connect(wet);
-    wet.connect(ctx.destination);
+    wet.connect(this.getOutputDestination(ctx));
     air.start(now, 0.35, 1.3);
   }
 
@@ -1199,7 +1491,7 @@ class SoundEngine {
     osc3.connect(osc3Gain);
     osc3Gain.connect(lowpass);
     lowpass.connect(master);
-    master.connect(ctx.destination);
+    master.connect(this.getOutputDestination(ctx));
 
     osc1.start(now);
     osc2.start(now);
@@ -1284,11 +1576,11 @@ class SoundEngine {
 
     src.connect(nibBand);
     nibBand.connect(nibGain);
-    nibGain.connect(ctx.destination);
+    nibGain.connect(this.getOutputDestination(ctx));
 
     src.connect(paperBody);
     paperBody.connect(paperGain);
-    paperGain.connect(ctx.destination);
+    paperGain.connect(this.getOutputDestination(ctx));
 
     src.start(now);
   }
@@ -1303,7 +1595,7 @@ class SoundEngine {
     const wet = ctx.createGain();
     wet.gain.value = 0.52;
     reverb.connect(wet);
-    wet.connect(ctx.destination);
+    wet.connect(this.getOutputDestination(ctx));
 
     // Dissolving dark air sweeping down into muffled darkness
     const air = ctx.createBufferSource();
@@ -1322,7 +1614,7 @@ class SoundEngine {
 
     air.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(this.getOutputDestination(ctx));
     gain.connect(reverb);
     air.start(now, 0.15, 2.65);
 
@@ -1337,7 +1629,7 @@ class SoundEngine {
     ghostGain.gain.exponentialRampToValueAtTime(0.0006, now + 2.5);
 
     ghost.connect(ghostGain);
-    ghostGain.connect(ctx.destination);
+    ghostGain.connect(this.getOutputDestination(ctx));
     ghostGain.connect(reverb);
     ghost.start(now);
     ghost.stop(now + 2.55);
@@ -1355,7 +1647,7 @@ class SoundEngine {
     gain.gain.setValueAtTime(0.045, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
     osc.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(this.getOutputDestination(ctx));
     osc.start(now);
     osc.stop(now + 0.05);
   }

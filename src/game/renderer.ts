@@ -4,7 +4,9 @@ import {
   FacingDir,
   getDeskCutsceneFrames,
   getNpcSpriteFrames,
+  getPlayerHandGridPos,
   getPlayerSpriteSheet,
+  PlayerPoseCategory,
 } from './sprites';
 import { getEnvironmentPatterns } from './textures';
 import {
@@ -173,6 +175,8 @@ export function renderScene(rc: RenderContext): void {
     ctx.clip();
   }
 
+  const surge = computeLightingSurge(progress, time);
+
   ctx.globalCompositeOperation = 'screen';
   for (const light of level.lights) {
     if (light.zone === 'corridor' && !progress.doorUnlocked) continue;
@@ -180,10 +184,12 @@ export function renderScene(rc: RenderContext): void {
     if (light.id === 'tv_screen_light' && !progress.tvOn) continue;
     const flickerMod =
       light.id === 'desk_lamp_light'
-        ? computeDeskLampMod(time)
-        : light.flicker
-          ? 0.94 + Math.sin(time * 7.3 + light.x) * 0.03 + Math.sin(time * 19.1) * 0.02
-          : 1;
+        ? surge.deskLampFactor
+        : (light.flicker
+            ? 0.94 + Math.sin(time * 7.3 + light.x) * 0.03 + Math.sin(time * 19.1) * 0.02
+            : 1) *
+          (light.id === 'tv_screen_light' ? 1 : surge.roomFactor);
+    if (flickerMod <= 0.005) continue;
     const r = light.radius * (0.72 + 0.28 * flickerMod);
     const effIntensity = light.intensity * flickerMod;
     const grad = ctx.createRadialGradient(light.x, light.y, 4, light.x, light.y, r);
@@ -197,21 +203,22 @@ export function renderScene(rc: RenderContext): void {
   }
 
   // Directional flashlight cone originating directly from the handheld flashlight lens tip
-  if (progress.flashlightOn) {
+  if (progress.flashlightOn && surge.flashlightFactor > 0.01) {
     const pose = getFlashlightPose(player, time, introCutscene);
     const dirLen = Math.hypot(player.facingX, player.facingY) || 1;
     const fx = player.facingX / dirLen;
     const fy = player.facingY / dirLen;
     const px0 = pose.tipX;
     const py0 = pose.tipY;
-    const beamLen = 170;
+    const fMod = surge.flashlightFactor;
+    const beamLen = 170 * (0.72 + 0.28 * Math.min(1, fMod));
     const angle = Math.atan2(fy, fx);
     const spread = 0.36;
 
     // Bright focal glow right at the flashlight lens
     const tipGlow = ctx.createRadialGradient(px0, py0, 0.5, px0, py0, 12);
-    tipGlow.addColorStop(0, 'rgba(255, 240, 198, 0.72)');
-    tipGlow.addColorStop(0.5, 'rgba(235, 205, 145, 0.25)');
+    tipGlow.addColorStop(0, `rgba(255, 240, 198, ${0.72 * fMod})`);
+    tipGlow.addColorStop(0.5, `rgba(235, 205, 145, ${0.25 * fMod})`);
     tipGlow.addColorStop(1, 'rgba(210, 180, 120, 0)');
     ctx.fillStyle = tipGlow;
     ctx.beginPath();
@@ -219,8 +226,8 @@ export function renderScene(rc: RenderContext): void {
     ctx.fill();
 
     const beamGrad = ctx.createRadialGradient(px0, py0, 2, px0, py0, beamLen);
-    beamGrad.addColorStop(0, 'rgba(242, 218, 165, 0.34)');
-    beamGrad.addColorStop(0.4, 'rgba(222, 194, 140, 0.14)');
+    beamGrad.addColorStop(0, `rgba(242, 218, 165, ${0.34 * fMod})`);
+    beamGrad.addColorStop(0.4, `rgba(222, 194, 140, ${0.14 * fMod})`);
     beamGrad.addColorStop(1, 'rgba(200, 175, 130, 0)');
     ctx.fillStyle = beamGrad;
     ctx.beginPath();
@@ -330,39 +337,45 @@ export function renderScene(rc: RenderContext): void {
     lightCtx.globalCompositeOperation = 'destination-out';
 
     // Personal sight aura keeping distant room corners atmospheric
-    const sightRadius = progress.flashlightOn ? 340 : 250;
+    const baseSightRadius = progress.flashlightOn && surge.flashlightFactor > 0.2 ? 340 : 250;
+    const sightRadius = Math.max(58, baseSightRadius * surge.sightScale);
     const sightGrad = lightCtx.createRadialGradient(
       player.x,
       player.y,
-      18,
+      14,
       player.x,
       player.y,
       sightRadius
     );
-    sightGrad.addColorStop(0, progress.flashlightOn ? 'rgba(0, 0, 0, 0.94)' : 'rgba(0, 0, 0, 0.86)');
-    sightGrad.addColorStop(0.42, progress.flashlightOn ? 'rgba(0, 0, 0, 0.7)' : 'rgba(0, 0, 0, 0.56)');
-    sightGrad.addColorStop(0.76, 'rgba(0, 0, 0, 0.28)');
-    sightGrad.addColorStop(1, 'rgba(0, 0, 0, 0.04)');
+    const innerSightAlpha =
+      (progress.flashlightOn && surge.flashlightFactor > 0.2 ? 0.94 : 0.86) * surge.sightInnerAlpha;
+    const midSightAlpha =
+      (progress.flashlightOn && surge.flashlightFactor > 0.2 ? 0.7 : 0.56) * surge.sightInnerAlpha;
+    sightGrad.addColorStop(0, `rgba(0, 0, 0, ${innerSightAlpha})`);
+    sightGrad.addColorStop(0.42, `rgba(0, 0, 0, ${midSightAlpha})`);
+    sightGrad.addColorStop(0.76, `rgba(0, 0, 0, ${0.28 * surge.sightInnerAlpha})`);
+    sightGrad.addColorStop(1, `rgba(0, 0, 0, ${0.04 * surge.sightInnerAlpha})`);
     lightCtx.fillStyle = sightGrad;
     lightCtx.beginPath();
     lightCtx.arc(player.x, player.y, sightRadius, 0, Math.PI * 2);
     lightCtx.fill();
 
     // Directional flashlight carve anchored to the handheld flashlight tip
-    if (progress.flashlightOn) {
+    if (progress.flashlightOn && surge.flashlightFactor > 0.01) {
       const pose = getFlashlightPose(player, time, introCutscene);
       const dirLen = Math.hypot(player.facingX, player.facingY) || 1;
       const fx = player.facingX / dirLen;
       const fy = player.facingY / dirLen;
       const px0 = pose.tipX;
       const py0 = pose.tipY;
-      const beamLen = 220;
+      const fMod = surge.flashlightFactor;
+      const beamLen = 220 * (0.65 + 0.35 * Math.min(1, fMod));
       const angle = Math.atan2(fy, fx);
       const spread = 0.4;
 
       const coneCarve = lightCtx.createRadialGradient(px0, py0, 4, px0, py0, beamLen);
-      coneCarve.addColorStop(0, 'rgba(0, 0, 0, 0.98)');
-      coneCarve.addColorStop(0.55, 'rgba(0, 0, 0, 0.64)');
+      coneCarve.addColorStop(0, `rgba(0, 0, 0, ${Math.min(0.98, 0.98 * fMod)})`);
+      coneCarve.addColorStop(0.55, `rgba(0, 0, 0, ${0.64 * fMod})`);
       coneCarve.addColorStop(1, 'rgba(0, 0, 0, 0)');
       lightCtx.fillStyle = coneCarve;
       lightCtx.beginPath();
@@ -379,10 +392,10 @@ export function renderScene(rc: RenderContext): void {
       if (light.id === 'tv_screen_light' && !progress.tvOn) continue;
       const flickerMod =
         light.id === 'desk_lamp_light'
-          ? computeDeskLampMod(time)
-          : light.flicker
-            ? 0.95 + Math.sin(time * 7.3 + light.x) * 0.03
-            : 1;
+          ? surge.deskLampFactor
+          : (light.flicker ? 0.95 + Math.sin(time * 7.3 + light.x) * 0.03 : 1) *
+            (light.id === 'tv_screen_light' ? 1 : surge.roomFactor);
+      if (flickerMod <= 0.005) continue;
       const r = light.radius * (0.72 + 0.28 * flickerMod);
       const effIntensity = light.intensity * flickerMod;
       const lGrad = lightCtx.createRadialGradient(light.x, light.y, 6, light.x, light.y, r);
@@ -440,6 +453,103 @@ export function renderScene(rc: RenderContext): void {
       ctx.fillRect(0, 0, width, height);
     }
   }
+}
+
+interface LightingSurgeFactors {
+  deskLampFactor: number;
+  roomFactor: number;
+  flashlightFactor: number;
+  sightScale: number;
+  sightInnerAlpha: number;
+}
+
+function computeLightingSurge(progress: LevelProgress, time: number): LightingSurgeFactors {
+  const baseLamp = computeDeskLampMod(time);
+  const phase = progress.tvLightSurgePhase;
+  const st = progress.tvLightSurgeTimer;
+
+  if (phase === 'flickering') {
+    const rapidWave =
+      Math.sin(st * 44.0) * 0.45 +
+      Math.sin(st * 73.5 + 1.1) * 0.35 +
+      Math.cos(st * 119.0) * 0.2;
+    const deskLampFactor =
+      rapidWave > 0.14 ? 0.92 + Math.abs(rapidWave) * 0.25 : rapidWave > -0.25 ? 0.16 : 0.02;
+
+    const flashWave =
+      Math.sin(st * 37.0 + 0.7) * 0.48 +
+      Math.cos(st * 64.0 + 2.3) * 0.32 +
+      Math.sin(st * 103.0) * 0.2;
+    const flashlightFactor =
+      flashWave > 0.18 ? 0.95 : flashWave > -0.2 ? 0.14 : 0.02;
+
+    const roomFactor = rapidWave > 0 ? 0.85 : 0.32;
+    return {
+      deskLampFactor,
+      roomFactor,
+      flashlightFactor,
+      sightScale: 0.72 + 0.28 * Math.min(1, deskLampFactor),
+      sightInnerAlpha: 0.78 + 0.16 * roomFactor,
+    };
+  }
+
+  if (phase === 'blackout') {
+    return {
+      deskLampFactor: 0,
+      roomFactor: 0,
+      flashlightFactor: 0,
+      sightScale: 0.24,
+      sightInnerAlpha: 0.32,
+    };
+  }
+
+  if (phase === 'recovering') {
+    const p = Math.min(1, Math.max(0, st / 3.25));
+    let lampPulse = 1;
+    let flashPulse = 1;
+
+    if (p < 0.16) {
+      lampPulse = 0.22;
+      flashPulse = 0.12;
+    } else if (p < 0.26) {
+      lampPulse = 0.06;
+      flashPulse = 0.48;
+    } else if (p < 0.44) {
+      lampPulse = 0.56;
+      flashPulse = 0.18;
+    } else if (p < 0.55) {
+      lampPulse = 0.24;
+      flashPulse = 0.76;
+    } else if (p < 0.72) {
+      lampPulse = 0.82;
+      flashPulse = 0.38;
+    } else if (p < 0.82) {
+      lampPulse = 0.48;
+      flashPulse = 0.88;
+    } else {
+      const settle = (p - 0.82) / 0.18;
+      lampPulse = 0.65 + 0.35 * settle;
+      flashPulse = 0.72 + 0.28 * settle;
+    }
+
+    const roomEase = Math.min(1, p * 1.15);
+    const roomFactor = Math.max(0.15, roomEase * (0.65 + 0.35 * lampPulse));
+    return {
+      deskLampFactor: baseLamp * lampPulse,
+      roomFactor,
+      flashlightFactor: flashPulse,
+      sightScale: 0.32 + 0.68 * roomEase,
+      sightInnerAlpha: 0.42 + 0.58 * roomEase,
+    };
+  }
+
+  return {
+    deskLampFactor: baseLamp,
+    roomFactor: 1,
+    flashlightFactor: 1,
+    sightScale: 1,
+    sightInnerAlpha: 1,
+  };
 }
 
 function computeDeskLampMod(t: number): number {
@@ -773,7 +883,7 @@ function drawProp(
     }
 
     case 'corner_desk': {
-      const lampFlicker = computeDeskLampMod(time);
+      const lampFlicker = computeLightingSurge(progress, time).deskLampFactor;
 
       // Floor contact shadow
       ctx.fillStyle = 'rgba(0, 0, 0, 0.56)';
@@ -864,7 +974,7 @@ function drawProp(
       ctx.beginPath();
       ctx.arc(lampX, lampY + 4, 7, 0, Math.PI * 2);
       ctx.fill();
-      if (progress.deskLampOn) {
+      if (progress.deskLampOn && lampFlicker > 0.01) {
         ctx.fillStyle = `rgba(232, 174, 78, ${0.42 + 0.58 * lampFlicker})`;
         ctx.beginPath();
         ctx.ellipse(lampX, lampY - 2, 10, 6, 0, 0, Math.PI * 2);
@@ -931,8 +1041,13 @@ function drawProp(
       // CRT TV facing straight NORTH (upward toward the main desk in the study)
       const tvCenterX = prop.x + prop.w / 2;
 
-      // Subtle CRT static glow spilling straight NORTH when TV is turned ON
-      const staticFlicker = progress.tvOn ? 0.14 + Math.sin(time * 9.5) * 0.04 : 0;
+      // Subtle CRT static or broadcast glow spilling straight NORTH when TV is turned ON
+      const isStatic = progress.tvMode === 'static';
+      const staticFlicker = progress.tvOn
+        ? isStatic
+          ? 0.08 + ((Math.sin(time * 47.3) * 0.5 + 0.5) * 0.14 + Math.random() * 0.08)
+          : 0.14 + Math.sin(time * 9.5) * 0.04
+        : 0;
       if (progress.tvOn) {
         const tvGlow = ctx.createLinearGradient(
           tvCenterX,
@@ -940,8 +1055,9 @@ function drawProp(
           tvCenterX,
           prop.y - 38
         );
-        tvGlow.addColorStop(0, `rgba(148, 192, 228, ${staticFlicker + 0.14})`);
-        tvGlow.addColorStop(1, 'rgba(148, 192, 228, 0)');
+        const glowColor = isStatic ? '210, 224, 238' : '148, 192, 228';
+        tvGlow.addColorStop(0, `rgba(${glowColor}, ${staticFlicker + 0.14})`);
+        tvGlow.addColorStop(1, `rgba(${glowColor}, 0)`);
         ctx.fillStyle = tvGlow;
         ctx.beginPath();
         ctx.moveTo(tvCenterX - 13, prop.y + 7);
@@ -956,7 +1072,9 @@ function drawProp(
       ctx.fillStyle = '#12161e';
       ctx.fillRect(tvCenterX - 15, prop.y + 5, 30, 5);
       if (progress.tvOn) {
-        ctx.fillStyle = `rgba(165, 210, 242, ${staticFlicker + 0.35})`;
+        ctx.fillStyle = isStatic
+          ? `rgba(218, 228, 238, ${staticFlicker + 0.34})`
+          : `rgba(165, 210, 242, ${staticFlicker + 0.35})`;
         ctx.fillRect(tvCenterX - 13, prop.y + 4, 26, 3);
       } else {
         ctx.fillStyle = '#0e131a';
@@ -1367,17 +1485,43 @@ interface FlashlightPose {
   tipY: number;
 }
 
+interface ResolvedPlayerPose {
+  category: PlayerPoseCategory;
+  dir: FacingDir;
+  frameIdx: number;
+  isCrouching: boolean;
+}
+
+function resolvePlayerPoseFrame(player: PlayerState): ResolvedPlayerPose {
+  const dir = getFacingDir(player.facingX, player.facingY);
+  const { interactAnim, interactKind, isMoving, walkCycle } = player;
+
+  if (interactAnim > 0 && interactKind !== 'none') {
+    const p = 1 - interactAnim;
+    if (interactKind === 'tv_crouch') {
+      if (p < 0.16) return { category: 'tv_crouch', dir, frameIdx: 0, isCrouching: true };
+      if (p < 0.36) return { category: 'tv_crouch', dir, frameIdx: 1, isCrouching: true };
+      if (p < 0.72) return { category: 'tv_crouch', dir, frameIdx: 2, isCrouching: true };
+      if (p < 0.88) return { category: 'tv_crouch', dir, frameIdx: 0, isCrouching: true };
+      return { category: 'walk', dir, frameIdx: 0, isCrouching: false };
+    }
+    const frameIdx = p < 0.2 || p > 0.78 ? 0 : 1;
+    return { category: interactKind, dir, frameIdx, isCrouching: false };
+  }
+
+  if (isMoving) {
+    const frameIdx = Math.floor(walkCycle * 6.5) % 4;
+    return { category: 'walk', dir, frameIdx, isCrouching: false };
+  }
+
+  return { category: 'walk', dir, frameIdx: 0, isCrouching: false };
+}
+
 function getFlashlightPose(
   player: PlayerState,
   time: number,
   introCutscene?: IntroCutsceneState
 ): FlashlightPose {
-  const dir = getFacingDir(player.facingX, player.facingY);
-  const idleBreath = !player.isMoving && player.interactAnim <= 0 ? Math.sin(time * 2.2) * 0.6 : 0;
-  const crouchShift =
-    player.interactAnim > 0 && player.interactKind === 'tv_crouch' ? 5 : 0;
-  const baseY = Math.round(player.y - idleBreath + crouchShift);
-
   if (
     introCutscene?.active &&
     (introCutscene.phase === 'sleeping' || introCutscene.phase === 'startled')
@@ -1385,28 +1529,27 @@ function getFlashlightPose(
     return { dir: 'down', handX: player.x + 8, handY: player.y - 6, tipX: player.x + 8, tipY: player.y - 1 };
   }
 
-  switch (dir) {
-    case 'right': {
-      const handX = Math.round(player.x + 4);
-      const handY = baseY - 5;
-      return { dir, handX, handY, tipX: handX + 7, tipY: handY };
-    }
-    case 'left': {
-      const handX = Math.round(player.x - 4);
-      const handY = baseY - 5;
-      return { dir, handX, handY, tipX: handX - 7, tipY: handY };
-    }
-    case 'up': {
-      const handX = Math.round(player.x + 9);
-      const handY = baseY - 7;
-      return { dir, handX, handY, tipX: handX, tipY: handY - 6 };
-    }
+  const resolved = resolvePlayerPoseFrame(player);
+  const idleBreath =
+    !player.isMoving && player.interactAnim <= 0 ? Math.sin(time * 2.2) * 0.6 : 0;
+  const drawW = 40;
+  const drawH = 50;
+  const drawX = Math.round(player.x - drawW / 2);
+  const drawY = Math.round(player.y - drawH + 12 - idleBreath);
+  const { gx, gy } = getPlayerHandGridPos(resolved.category, resolved.dir, resolved.frameIdx);
+  const handX = drawX + gx * 2 + 1;
+  const handY = drawY + gy * 2 + 1;
+
+  switch (resolved.dir) {
+    case 'right':
+      return { dir: 'right', handX, handY, tipX: handX + 7, tipY: handY };
+    case 'left':
+      return { dir: 'left', handX, handY, tipX: handX - 7, tipY: handY };
+    case 'up':
+      return { dir: 'up', handX, handY, tipX: handX, tipY: handY - 6 };
     case 'down':
-    default: {
-      const handX = Math.round(player.x + 9);
-      const handY = baseY - 5;
+    default:
       return { dir: 'down', handX, handY, tipX: handX, tipY: handY + 5 };
-    }
   }
 }
 
@@ -1416,7 +1559,7 @@ function drawHandheldFlashlight(ctx: CanvasRenderingContext2D, pose: FlashlightP
 
   ctx.save();
   if (pose.dir === 'right') {
-    // Grip hand pixel + outstretched metal body + brass bezel + warm lit lens
+    // Outstretched metal body + brass bezel + warm lit lens, gripped directly by hand
     ctx.fillStyle = '#0b0d12';
     ctx.fillRect(hx - 1, hy - 2, 9, 4);
     ctx.fillStyle = '#1f2633';
@@ -1427,6 +1570,8 @@ function drawHandheldFlashlight(ctx: CanvasRenderingContext2D, pose: FlashlightP
     ctx.fillRect(hx + 4, hy - 1, 2, 2);
     ctx.fillStyle = '#fff0c4';
     ctx.fillRect(hx + 6, hy - 1, 2, 2);
+    ctx.fillStyle = '#ccb69f';
+    ctx.fillRect(hx - 1, hy - 1, 2, 2);
   } else if (pose.dir === 'left') {
     ctx.fillStyle = '#0b0d12';
     ctx.fillRect(hx - 8, hy - 2, 9, 4);
@@ -1438,6 +1583,8 @@ function drawHandheldFlashlight(ctx: CanvasRenderingContext2D, pose: FlashlightP
     ctx.fillRect(hx - 6, hy - 1, 2, 2);
     ctx.fillStyle = '#fff0c4';
     ctx.fillRect(hx - 8, hy - 1, 2, 2);
+    ctx.fillStyle = '#ccb69f';
+    ctx.fillRect(hx - 1, hy - 1, 2, 2);
   } else if (pose.dir === 'up') {
     ctx.fillStyle = '#0b0d12';
     ctx.fillRect(hx - 2, hy - 7, 4, 8);
@@ -1447,6 +1594,8 @@ function drawHandheldFlashlight(ctx: CanvasRenderingContext2D, pose: FlashlightP
     ctx.fillRect(hx - 1, hy - 5, 2, 2);
     ctx.fillStyle = '#fff0c4';
     ctx.fillRect(hx - 1, hy - 7, 2, 2);
+    ctx.fillStyle = '#ccb69f';
+    ctx.fillRect(hx - 1, hy - 1, 2, 2);
   } else {
     // Facing down: held in right-side hand pointing downward/forward
     ctx.fillStyle = '#0b0d12';
@@ -1459,6 +1608,8 @@ function drawHandheldFlashlight(ctx: CanvasRenderingContext2D, pose: FlashlightP
     ctx.fillRect(hx - 1, hy + 3, 2, 1);
     ctx.fillStyle = '#fff0c4';
     ctx.fillRect(hx - 1, hy + 4, 2, 2);
+    ctx.fillStyle = '#ccb69f';
+    ctx.fillRect(hx - 1, hy - 1, 2, 2);
   }
   ctx.restore();
 }
@@ -1470,35 +1621,43 @@ function drawHandheldBrassKey(ctx: CanvasRenderingContext2D, pose: FlashlightPos
   ctx.save();
   if (pose.dir === 'right') {
     ctx.fillStyle = '#0b0d12';
-    ctx.fillRect(hx - 1, hy - 2, 7, 4);
+    ctx.fillRect(hx - 1, hy - 2, 8, 4);
     ctx.fillStyle = '#cfa048';
-    ctx.fillRect(hx, hy - 1, 2, 2);
+    ctx.fillRect(hx + 1, hy - 1, 2, 2);
     ctx.fillStyle = '#e8c474';
-    ctx.fillRect(hx + 2, hy - 1, 3, 1);
-    ctx.fillRect(hx + 4, hy, 1, 1);
+    ctx.fillRect(hx + 3, hy - 1, 3, 1);
+    ctx.fillRect(hx + 5, hy, 1, 1);
+    ctx.fillStyle = '#ccb69f';
+    ctx.fillRect(hx - 1, hy - 1, 2, 2);
   } else if (pose.dir === 'left') {
     ctx.fillStyle = '#0b0d12';
-    ctx.fillRect(hx - 6, hy - 2, 7, 4);
+    ctx.fillRect(hx - 7, hy - 2, 8, 4);
     ctx.fillStyle = '#cfa048';
-    ctx.fillRect(hx - 2, hy - 1, 2, 2);
+    ctx.fillRect(hx - 3, hy - 1, 2, 2);
     ctx.fillStyle = '#e8c474';
-    ctx.fillRect(hx - 5, hy - 1, 3, 1);
-    ctx.fillRect(hx - 5, hy, 1, 1);
+    ctx.fillRect(hx - 6, hy - 1, 3, 1);
+    ctx.fillRect(hx - 6, hy, 1, 1);
+    ctx.fillStyle = '#ccb69f';
+    ctx.fillRect(hx - 1, hy - 1, 2, 2);
   } else if (pose.dir === 'up') {
     ctx.fillStyle = '#0b0d12';
-    ctx.fillRect(hx - 2, hy - 6, 4, 6);
+    ctx.fillRect(hx - 2, hy - 7, 4, 8);
     ctx.fillStyle = '#cfa048';
-    ctx.fillRect(hx - 1, hy - 2, 2, 2);
+    ctx.fillRect(hx - 1, hy - 3, 2, 2);
     ctx.fillStyle = '#e8c474';
-    ctx.fillRect(hx - 1, hy - 5, 1, 3);
+    ctx.fillRect(hx - 1, hy - 6, 1, 3);
+    ctx.fillStyle = '#ccb69f';
+    ctx.fillRect(hx - 1, hy - 1, 2, 2);
   } else {
     ctx.fillStyle = '#0b0d12';
-    ctx.fillRect(hx - 2, hy - 1, 4, 6);
+    ctx.fillRect(hx - 2, hy - 1, 4, 7);
     ctx.fillStyle = '#cfa048';
-    ctx.fillRect(hx - 1, hy, 2, 2);
+    ctx.fillRect(hx - 1, hy + 1, 2, 2);
     ctx.fillStyle = '#e8c474';
-    ctx.fillRect(hx - 1, hy + 2, 1, 3);
-    ctx.fillRect(hx, hy + 3, 1, 1);
+    ctx.fillRect(hx - 1, hy + 3, 1, 2);
+    ctx.fillRect(hx, hy + 4, 1, 1);
+    ctx.fillStyle = '#ccb69f';
+    ctx.fillRect(hx - 1, hy - 1, 2, 2);
   }
   ctx.restore();
 }
@@ -1510,7 +1669,7 @@ function drawPixelPlayer(
   introCutscene?: IntroCutsceneState,
   activeHandItemId: LevelProgress['activeHandItemId'] = null
 ): void {
-  const { x, y, walkCycle, isMoving, facingX, facingY, interactAnim, interactKind } = player;
+  const { x, y, isMoving, interactAnim } = player;
 
   if (
     introCutscene?.active &&
@@ -1553,41 +1712,24 @@ function drawPixelPlayer(
   }
 
   const sheet = getPlayerSpriteSheet();
-  const dir = getFacingDir(facingX, facingY);
-
-  let sprite: HTMLCanvasElement;
-  if (interactAnim > 0 && interactKind !== 'none') {
-    const p = 1 - interactAnim; // 0 -> 1 across interaction duration
-    if (interactKind === 'tv_crouch') {
-      const crouchFrames = sheet.tv_crouch[dir];
-      if (p < 0.16) sprite = crouchFrames[0];
-      else if (p < 0.36) sprite = crouchFrames[1];
-      else if (p < 0.72) sprite = crouchFrames[2];
-      else if (p < 0.88) sprite = crouchFrames[0];
-      else sprite = sheet.walk[dir][0];
-    } else {
-      const actionFrames = sheet[interactKind][dir];
-      if (p < 0.2 || p > 0.78) {
-        sprite = actionFrames[0];
-      } else {
-        sprite = actionFrames[1];
-      }
-    }
-  } else if (isMoving) {
-    const walkFrames = sheet.walk[dir];
-    const frameIdx = Math.floor(walkCycle * 6.5) % walkFrames.length;
-    sprite = walkFrames[frameIdx];
-  } else {
-    sprite = sheet.walk[dir][0];
-  }
+  const resolved = resolvePlayerPoseFrame(player);
+  const frames = sheet[resolved.category][resolved.dir];
+  const sprite = frames[Math.min(frames.length - 1, Math.max(0, resolved.frameIdx))];
 
   ctx.save();
 
   // Contact shadow right under boots (stays anchored while character acts or crouches)
-  const isCrouching = interactAnim > 0 && interactKind === 'tv_crouch';
   ctx.fillStyle = 'rgba(0, 0, 0, 0.52)';
   ctx.beginPath();
-  ctx.ellipse(x, y + 10, isCrouching ? 12 : 10, isCrouching ? 5.2 : 4.5, 0, 0, Math.PI * 2);
+  ctx.ellipse(
+    x,
+    y + 10,
+    resolved.isCrouching ? 12 : 10,
+    resolved.isCrouching ? 5.2 : 4.5,
+    0,
+    0,
+    Math.PI * 2
+  );
   ctx.fill();
 
   const idleBreath = !isMoving && interactAnim <= 0 ? Math.sin(time * 2.2) * 0.6 : 0;

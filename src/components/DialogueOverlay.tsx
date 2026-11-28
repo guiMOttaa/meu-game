@@ -7,6 +7,7 @@ import { DialogueState, SubtitleSize } from '../game/types';
 interface DialogueOverlayProps {
   dialogue: DialogueState;
   subtitleSize?: SubtitleSize;
+  subtitleBgOpacity?: number;
   interactKey?: string;
   onAdvance: () => void;
   onClose: () => void;
@@ -15,6 +16,7 @@ interface DialogueOverlayProps {
 export function DialogueOverlay({
   dialogue,
   subtitleSize = 'medium',
+  subtitleBgOpacity = 0.92,
   interactKey = 'KeyE',
   onAdvance,
   onClose,
@@ -140,7 +142,8 @@ export function DialogueOverlay({
               {/* Main Dialogue Box */}
               <div
                 onClick={onAdvance}
-                className="relative cursor-pointer border border-white/18 bg-[#090c12]/92 px-4 py-3 text-[#ece4d6] shadow-[0_14px_32px_rgba(0,0,0,0.65)] sm:px-5 sm:py-3.5"
+                style={{ backgroundColor: `rgba(9, 12, 18, ${subtitleBgOpacity})` }}
+                className="relative cursor-pointer border border-white/18 px-4 py-3 text-[#ece4d6] shadow-[0_14px_32px_rgba(0,0,0,0.65)] sm:px-5 sm:py-3.5"
               >
                 <p className={`min-h-[2.8em] ${getDialogueTextClass(subtitleSize)}`}>
                   {visibleText}

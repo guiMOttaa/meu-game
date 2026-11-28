@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Lock } from 'lucide-react';
 import { motion } from 'motion/react';
 import chapterOneArtwork from '../assets/images/study_title_backdrop_clean_1795749762511.jpg';
+import { GAME_VERSION } from '../game/version';
 
 interface ChapterSelectScreenProps {
   onSelectChapter: (chapterNumber: number) => void;
@@ -53,9 +54,9 @@ const CHAPTERS: ChapterDef[] = [
 ];
 
 const REST_CLIP_PATH =
-  'polygon(50% 6.5%, 50% 6.5%, 93% 50%, 93% 50%, 50% 93.5%, 50% 93.5%, 7% 50%, 7% 50%)';
+  'polygon(50% 10%, 50% 10%, 92% 50%, 92% 50%, 50% 90%, 50% 90%, 8% 50%, 8% 50%)';
 const EXPANDED_CLIP_PATH =
-  'polygon(50% 0.5%, 50% 0.5%, 95.6% 46.4%, 95.6% 53.6%, 50% 99.5%, 50% 99.5%, 4.4% 53.6%, 4.4% 46.4%)';
+  'polygon(50% 0.54%, 50% 0.54%, 93.68% 42.14%, 93.68% 57.86%, 50% 99.46%, 50% 99.46%, 6.32% 57.86%, 6.32% 42.14%)';
 const FULLSCREEN_CLIP_PATH =
   'polygon(0% 0%, 100% 0%, 100% 0%, 100% 100%, 100% 100%, 0% 100%, 0% 100%, 0% 0%)';
 
@@ -219,14 +220,14 @@ export function ChapterSelectScreen({ onSelectChapter }: ChapterSelectScreenProp
                   />
                   {/* Subtle contrast vignette that opens up on expand to reveal more of the design */}
                   <div
-                    className={`absolute inset-0 bg-[radial-gradient(ellipse_at_50%_52%,rgba(6,8,13,0.72)_0%,rgba(6,8,13,0.34)_56%,rgba(5,7,11,0.75)_100%)] transition-opacity duration-300 ${
-                      isExpanded ? 'opacity-45' : 'opacity-100'
+                    className={`absolute inset-0 bg-[radial-gradient(ellipse_at_50%_52%,rgba(6,8,13,0.74)_0%,rgba(6,8,13,0.38)_56%,rgba(5,7,11,0.78)_100%)] transition-opacity duration-300 ${
+                      isExpanded ? 'opacity-50' : 'opacity-100'
                     }`}
                   />
                 </div>
               )}
 
-              {/* Twin-Triangle Pointed SVG Frame (Top & Bottom Triangles Expand Outward) */}
+              {/* Twin-Triangle Pointed SVG Frame (Top & Bottom Triangles Open to Create a Clean Middle Opening) */}
               <svg
                 viewBox="0 0 100 140"
                 aria-hidden="true"
@@ -251,13 +252,13 @@ export function ChapterSelectScreen({ onSelectChapter }: ChapterSelectScreenProp
                   style={{
                     transformOrigin: '50px 70px',
                     transform: isExpanded
-                      ? 'translateY(-5px) scale(1.06)'
+                      ? 'translateY(-11px) scale(1.04)'
                       : 'translateY(0px) scale(1)',
                     transition: 'transform 320ms cubic-bezier(0.16, 1, 0.3, 1)',
                   }}
                 >
                   <polygon
-                    points="50,9 93,70 7,70"
+                    points="50,14 92,70 8,70"
                     fill={
                       isUnlocked && chapter.artwork ? 'none' : `url(#chap-bg-${chapter.number})`
                     }
@@ -268,21 +269,21 @@ export function ChapterSelectScreen({ onSelectChapter }: ChapterSelectScreenProp
                           : 'rgba(216, 162, 74, 0.78)'
                         : 'rgba(130, 142, 160, 0.24)'
                     }
-                    strokeWidth="1.25"
+                    strokeWidth="1.2"
                     className="transition-colors duration-300"
                   />
                   {/* Top inner filigree triangle */}
                   <polygon
-                    points="50,15 88,68 12,68"
+                    points="50,20 87,68 13,68"
                     fill="none"
                     stroke={
                       isUnlocked
                         ? isExpanded
-                          ? 'rgba(240, 200, 120, 0.55)'
-                          : 'rgba(216, 162, 74, 0.32)'
+                          ? 'rgba(240, 200, 120, 0.5)'
+                          : 'rgba(216, 162, 74, 0.3)'
                         : 'rgba(130, 142, 160, 0.1)'
                     }
-                    strokeWidth="0.6"
+                    strokeWidth="0.55"
                     className="transition-colors duration-300"
                   />
                 </g>
@@ -292,13 +293,13 @@ export function ChapterSelectScreen({ onSelectChapter }: ChapterSelectScreenProp
                   style={{
                     transformOrigin: '50px 70px',
                     transform: isExpanded
-                      ? 'translateY(5px) scale(1.06)'
+                      ? 'translateY(11px) scale(1.04)'
                       : 'translateY(0px) scale(1)',
                     transition: 'transform 320ms cubic-bezier(0.16, 1, 0.3, 1)',
                   }}
                 >
                   <polygon
-                    points="7,70 93,70 50,131"
+                    points="8,70 92,70 50,126"
                     fill={
                       isUnlocked && chapter.artwork ? 'none' : `url(#chap-bg-${chapter.number})`
                     }
@@ -309,21 +310,21 @@ export function ChapterSelectScreen({ onSelectChapter }: ChapterSelectScreenProp
                           : 'rgba(216, 162, 74, 0.78)'
                         : 'rgba(130, 142, 160, 0.24)'
                     }
-                    strokeWidth="1.25"
+                    strokeWidth="1.2"
                     className="transition-colors duration-300"
                   />
                   {/* Bottom inner filigree triangle */}
                   <polygon
-                    points="12,72 88,72 50,125"
+                    points="13,72 87,72 50,120"
                     fill="none"
                     stroke={
                       isUnlocked
                         ? isExpanded
-                          ? 'rgba(240, 200, 120, 0.55)'
-                          : 'rgba(216, 162, 74, 0.32)'
+                          ? 'rgba(240, 200, 120, 0.5)'
+                          : 'rgba(216, 162, 74, 0.3)'
                         : 'rgba(130, 142, 160, 0.1)'
                     }
-                    strokeWidth="0.6"
+                    strokeWidth="0.55"
                     className="transition-colors duration-300"
                   />
                 </g>
@@ -343,15 +344,15 @@ export function ChapterSelectScreen({ onSelectChapter }: ChapterSelectScreenProp
                 />
               )}
 
-              {/* Chapter Content */}
-              <div className="relative z-10 flex w-full flex-col items-center justify-center px-6 text-center">
+              {/* Chapter Content: splits neatly above/below seam when closed, converges into the middle gap when expanded */}
+              <div className="relative z-10 flex w-full flex-col items-center justify-center px-5 text-center">
                 <span
-                  className={`font-mono text-xs font-semibold tracking-[0.22em] uppercase transition-colors duration-200 sm:text-sm ${
+                  className={`font-mono text-[10px] font-semibold tracking-[0.2em] uppercase transition-all duration-300 ease-out sm:text-[11px] xl:text-xs ${
                     isUnlocked
                       ? isExpanded
-                        ? 'text-[#f3d08a] drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)]'
-                        : 'text-[#e2bc78] drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)]'
-                      : 'text-[#5b6473]'
+                        ? 'translate-y-0 text-[#f3d08a] drop-shadow-[0_2px_8px_rgba(0,0,0,0.98)]'
+                        : '-translate-y-3.5 text-[#e2bc78] drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)] sm:-translate-y-4'
+                      : '-translate-y-3.5 text-[#5b6473] sm:-translate-y-4'
                   }`}
                 >
                   Capítulo {chapter.number}
@@ -359,16 +360,18 @@ export function ChapterSelectScreen({ onSelectChapter }: ChapterSelectScreenProp
 
                 {isUnlocked && chapter.title ? (
                   <h2
-                    className={`mt-2 font-display text-lg leading-snug font-semibold tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] transition-colors duration-200 sm:text-xl lg:text-2xl ${
-                      isExpanded ? 'text-[#fff0d0]' : 'text-[#f6efe2]'
+                    className={`font-display text-[11px] leading-tight font-semibold tracking-wide whitespace-nowrap drop-shadow-[0_2px_10px_rgba(0,0,0,0.98)] transition-all duration-300 ease-out sm:text-[13.5px] lg:text-[15.5px] xl:text-[17.5px] ${
+                      isExpanded
+                        ? 'mt-0.5 translate-y-0 text-[#fff0d0]'
+                        : 'mt-0 translate-y-3.5 text-[#f6efe2] sm:translate-y-4'
                     }`}
                   >
                     {chapter.title}
                   </h2>
                 ) : (
-                  <div className="mt-3 flex flex-col items-center justify-center">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full border border-[#4a5260]/45 bg-[#12161f]/90 text-[#727b8a] sm:h-14 sm:w-14">
-                      <Lock className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={1.8} />
+                  <div className="mt-1 flex translate-y-4 flex-col items-center justify-center">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[#4a5260]/45 bg-[#12161f]/90 text-[#727b8a] sm:h-11 sm:w-11">
+                      <Lock className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={1.8} />
                     </div>
                   </div>
                 )}
@@ -439,6 +442,17 @@ export function ChapterSelectScreen({ onSelectChapter }: ChapterSelectScreenProp
           />
         </motion.div>
       )}
+      {/* Version indicator in bottom-right corner */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: isTransitioning ? 0 : 1 }}
+        transition={{ duration: isTransitioning ? 0.2 : 0.45 }}
+        className="pointer-events-none fixed right-5 bottom-4 z-20 select-none sm:right-7 sm:bottom-5"
+      >
+        <span className="font-mono text-[11px] tracking-[0.18em] text-[#9b8f7a]/80">
+          Versão {GAME_VERSION}
+        </span>
+      </motion.div>
     </div>
   );
 }

@@ -1,13 +1,20 @@
 import { useEffect, useState } from 'react';
-import { Volume2, Captions, Mic, Keyboard, RotateCcw, X } from 'lucide-react';
+import { Volume2, Captions, Mic, Keyboard, RotateCcw, Eye, AudioLines, X } from 'lucide-react';
 import { motion } from 'motion/react';
+import { COLORBLIND_OPTIONS } from '../game/accessibility';
 import { soundEngine } from '../game/audio';
 import {
   DEFAULT_KEY_BINDINGS,
   formatKeyCode,
   getWorldSubtitleTextClass,
 } from '../game/settings';
-import { AudioLanguageMode, ControlAction, GameSettings, SubtitleSize } from '../game/types';
+import {
+  AudioLanguageMode,
+  ColorblindMode,
+  ControlAction,
+  GameSettings,
+  SubtitleSize,
+} from '../game/types';
 
 interface SettingsModalProps {
   settings: GameSettings;
@@ -16,7 +23,7 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-type SettingsTab = 'audio' | 'controls';
+type SettingsTab = 'audio' | 'colorblind' | 'controls';
 
 interface ControlRowDef {
   action: ControlAction;
@@ -130,6 +137,20 @@ export function SettingsModal({
     onChange({ ...settings, subtitleSize });
   };
 
+  const setSubtitleBgOpacity = (subtitleBgOpacity: number) => {
+    onChange({ ...settings, subtitleBgOpacity: Math.max(0, Math.min(1, subtitleBgOpacity)) });
+  };
+
+  const toggleMonoAudio = () => {
+    soundEngine.playUiClick();
+    onChange({ ...settings, monoAudio: !settings.monoAudio });
+  };
+
+  const setColorblindMode = (colorblindMode: ColorblindMode) => {
+    soundEngine.playUiClick();
+    onChange({ ...settings, colorblindMode });
+  };
+
   const handleResetControls = () => {
     soundEngine.playUiClick();
     setListeningAction(null);
@@ -141,6 +162,7 @@ export function SettingsModal({
 
   const musicPct = Math.round(settings.musicVolume * 100);
   const speechPct = Math.round(settings.speechVolume * 100);
+  const subtitleBgPct = Math.round(settings.subtitleBgOpacity * 100);
 
   const renderControlRow = (row: ControlRowDef) => {
     const isListening = listeningAction === row.action;
@@ -184,7 +206,7 @@ export function SettingsModal({
         initial={{ opacity: 0, scale: 0.97, y: 6 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-        className="flex max-h-[90vh] w-full max-w-md flex-col border border-white/14 bg-[#0b0e15] p-6 text-[#e6dfd3] shadow-2xl sm:p-7"
+        className="flex max-h-[90vh] w-full max-w-lg flex-col border border-white/14 bg-[#0b0e15] p-6 text-[#e6dfd3] shadow-2xl sm:p-7"
       >
         <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
           <div>
@@ -210,7 +232,7 @@ export function SettingsModal({
         </div>
 
         {/* Category Tabs */}
-        <div className="mt-4 grid grid-cols-2 gap-2" role="tablist" aria-label="Categorias">
+        <div className="mt-4 grid grid-cols-3 gap-2" role="tablist" aria-label="Categorias">
           <button
             type="button"
             role="tab"
@@ -220,14 +242,33 @@ export function SettingsModal({
               setListeningAction(null);
               setActiveTab('audio');
             }}
-            className={`flex cursor-pointer items-center justify-center gap-2 border px-3 py-2 text-xs font-medium transition-colors ${
+            className={`flex cursor-pointer items-center justify-center gap-1.5 border px-2.5 py-2 text-xs font-medium transition-colors ${
               activeTab === 'audio'
                 ? 'border-[#d8a24a]/75 bg-[#201911] text-[#f4e2be]'
                 : 'border-white/10 bg-[#10141c] text-[#9ea7b5] hover:border-white/25 hover:text-[#e4ded2]'
             }`}
           >
-            <Volume2 className="h-3.5 w-3.5" />
-            <span>Áudio e Legendas</span>
+            <Volume2 className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">Áudio e Legendas</span>
+          </button>
+
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'colorblind'}
+            onClick={() => {
+              soundEngine.playUiClick();
+              setListeningAction(null);
+              setActiveTab('colorblind');
+            }}
+            className={`flex cursor-pointer items-center justify-center gap-1.5 border px-2.5 py-2 text-xs font-medium transition-colors ${
+              activeTab === 'colorblind'
+                ? 'border-[#d8a24a]/75 bg-[#201911] text-[#f4e2be]'
+                : 'border-white/10 bg-[#10141c] text-[#9ea7b5] hover:border-white/25 hover:text-[#e4ded2]'
+            }`}
+          >
+            <Eye className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">Daltonismo</span>
           </button>
 
           <button
@@ -238,14 +279,14 @@ export function SettingsModal({
               soundEngine.playUiClick();
               setActiveTab('controls');
             }}
-            className={`flex cursor-pointer items-center justify-center gap-2 border px-3 py-2 text-xs font-medium transition-colors ${
+            className={`flex cursor-pointer items-center justify-center gap-1.5 border px-2.5 py-2 text-xs font-medium transition-colors ${
               activeTab === 'controls'
                 ? 'border-[#d8a24a]/75 bg-[#201911] text-[#f4e2be]'
                 : 'border-white/10 bg-[#10141c] text-[#9ea7b5] hover:border-white/25 hover:text-[#e4ded2]'
             }`}
           >
-            <Keyboard className="h-3.5 w-3.5" />
-            <span>Controles</span>
+            <Keyboard className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">Controles</span>
           </button>
         </div>
 
@@ -295,6 +336,41 @@ export function SettingsModal({
                   onChange={(e) => setSpeechVolume(Number(e.target.value) / 100)}
                   className="h-1.5 w-full cursor-pointer accent-[#d8a24a] disabled:cursor-not-allowed disabled:opacity-40"
                 />
+              </div>
+
+              {/* Áudio Mono */}
+              <div className="flex items-center justify-between gap-3 border border-white/10 bg-[#10141c] px-3.5 py-2.5">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-xs font-medium text-[#dfd7c8]">
+                    <AudioLines className="h-3.5 w-3.5 text-[#d8a24a]" />
+                    <span>Áudio Mono</span>
+                  </div>
+                  <p className="mt-0.5 text-[11px] text-[#8d96a6]">
+                    {settings.monoAudio
+                      ? 'Mono ativo (canais esquerdo e direito unidos)'
+                      : 'Estéreo (padrão)'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={settings.monoAudio}
+                  aria-label="Áudio Mono"
+                  onClick={toggleMonoAudio}
+                  className={`flex shrink-0 cursor-pointer items-center gap-2 border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    settings.monoAudio
+                      ? 'border-[#d8a24a]/75 bg-[#201911] text-[#f4e2be]'
+                      : 'border-white/15 bg-[#151a25] text-[#9ea7b5] hover:border-white/30 hover:text-[#e4ded2]'
+                  }`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`inline-block h-2 w-2 rounded-full transition-colors ${
+                      settings.monoAudio ? 'bg-[#e6b665]' : 'bg-[#5c6575]'
+                    }`}
+                  />
+                  <span>{settings.monoAudio ? 'Mono' : 'Estéreo'}</span>
+                </button>
               </div>
 
               {/* Modo de Jogo (Dublagem vs Legendado) */}
@@ -369,12 +445,93 @@ export function SettingsModal({
                   ))}
                 </div>
 
-                {/* Live Subtitle Preview */}
-                <div className="mt-2.5 border border-white/8 bg-[#07090e] px-3 py-2.5 text-center">
-                  <p className={`text-[#ece4d6] ${getWorldSubtitleTextClass(settings.subtitleSize)}`}>
-                    <span className="font-semibold text-[#d8a24a]">Voz: </span>
-                    Acorda...
-                  </p>
+                {/* Opacidade do Fundo da Legenda */}
+                <div className="mt-3.5">
+                  <div className="mb-2 flex items-center justify-between text-xs">
+                    <span className="font-medium text-[#dfd7c8]">
+                      Opacidade do Fundo da Legenda
+                    </span>
+                    <span className="font-mono text-[#b89b6d]">{subtitleBgPct}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={subtitleBgPct}
+                    aria-label="Opacidade do Fundo da Legenda"
+                    onChange={(e) => setSubtitleBgOpacity(Number(e.target.value) / 100)}
+                    className="h-1.5 w-full cursor-pointer accent-[#d8a24a]"
+                  />
+                </div>
+
+                {/* Live Subtitle Preview (borda preservada, apenas transparência do fundo alterada) */}
+                <div className="mt-2.5 flex justify-center border border-white/8 bg-[linear-gradient(135deg,#181f2c_0%,#111622_52%,#1d1712_100%)] px-3 py-3">
+                  <div
+                    style={{ backgroundColor: `rgba(8, 10, 15, ${settings.subtitleBgOpacity})` }}
+                    className="border border-[#d8a24a]/35 px-4 py-1.5 text-center shadow-[0_6px_18px_rgba(0,0,0,0.45)]"
+                  >
+                    <p
+                      className={`text-[#efe7d8] ${getWorldSubtitleTextClass(settings.subtitleSize)}`}
+                    >
+                      <span className="font-semibold text-[#d8a24a]">Voz: </span>
+                      Acorda...
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : activeTab === 'colorblind' ? (
+            <div className="flex flex-col gap-4">
+              <p className="text-xs leading-relaxed text-[#949eaf]">
+                Ajusta o filtro de cores em tempo real para facilitar a distinção de sinais visuais, luzes e objetos na cena.
+              </p>
+
+              <div>
+                <div className="mb-2 flex items-center gap-2 text-xs font-medium text-[#dfd7c8]">
+                  <Eye className="h-3.5 w-3.5 text-[#d8a24a]" />
+                  <span>Modo Daltonismo</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {COLORBLIND_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setColorblindMode(opt.id)}
+                      className={`flex cursor-pointer flex-col items-start border px-3.5 py-2.5 text-left transition-colors ${
+                        settings.colorblindMode === opt.id
+                          ? 'border-[#d8a24a]/75 bg-[#201911] text-[#f4e2be]'
+                          : 'border-white/10 bg-[#10141c] text-[#9ea7b5] hover:border-white/25 hover:text-[#e4ded2]'
+                      }`}
+                    >
+                      <span className="text-xs font-semibold">{opt.label}</span>
+                      <span className="mt-0.5 text-[11px] opacity-75">{opt.hint}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="border border-white/8 bg-[#0e121a] px-3.5 py-3">
+                <p className="mb-2 text-[11px] font-medium tracking-[0.14em] text-[#b89b6d] uppercase">
+                  Referência de Contraste
+                </p>
+                <div className="grid grid-cols-4 gap-2">
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="h-5 w-full border border-white/15 bg-[#d9483b]" />
+                    <span className="text-[10px] text-[#949eaf]">Alerta</span>
+                  </div>
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="h-5 w-full border border-white/15 bg-[#3ea66b]" />
+                    <span className="text-[10px] text-[#949eaf]">Seguro</span>
+                  </div>
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="h-5 w-full border border-white/15 bg-[#d8a24a]" />
+                    <span className="text-[10px] text-[#949eaf]">Chave</span>
+                  </div>
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="h-5 w-full border border-white/15 bg-[#4a8fe7]" />
+                    <span className="text-[10px] text-[#949eaf]">Luz</span>
+                  </div>
                 </div>
               </div>
             </div>
