@@ -3,6 +3,7 @@ import { ChevronLeft } from 'lucide-react';
 import { motion } from 'motion/react';
 import studyBackdropImg from '../assets/images/study_title_backdrop_clean_1795749762511.jpg';
 import { soundEngine } from '../game/audio';
+import { useTouchViewport } from '../game/touch';
 import { GameSaveData, GameSettings } from '../game/types';
 import { SettingsModal } from './SettingsModal';
 
@@ -108,6 +109,7 @@ export function TitleScreen({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fxCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const touch = useTouchViewport();
 
   // Title Screen looping theme music
   useEffect(() => {
@@ -476,7 +478,11 @@ export function TitleScreen({
       </div>
 
       {/* Top bar: Back to chapters on left */}
-      <div className="relative z-10 flex items-center justify-between p-5 sm:p-7">
+      <div
+        className={`relative z-10 flex items-center justify-between ${
+          touch.isShortLandscape ? 'px-4 pt-3 pb-1' : 'p-5 sm:p-7'
+        }`}
+      >
         {onBackToChapters ? (
           <button
             type="button"
@@ -485,7 +491,9 @@ export function TitleScreen({
               onBackToChapters();
             }}
             aria-label="Voltar aos capítulos"
-            className="flex h-10 cursor-pointer items-center gap-1.5 rounded-sm border border-white/15 bg-[#0c0f14]/85 px-3.5 text-xs font-medium tracking-wide text-[#c2cad6] transition-colors duration-150 hover:border-[#d8a24a]/55 hover:text-[#f2ece1] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e6b665]"
+            className={`flex cursor-pointer items-center gap-1.5 rounded-sm border border-white/15 bg-[#0c0f14]/85 text-xs font-medium tracking-wide text-[#c2cad6] transition-colors duration-150 hover:border-[#d8a24a]/55 hover:text-[#f2ece1] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e6b665] ${
+              touch.isShortLandscape ? 'h-8 px-2.5' : 'h-10 px-3.5'
+            }`}
           >
             <ChevronLeft className="h-4 w-4" />
             <span>Capítulos</span>
@@ -496,20 +504,28 @@ export function TitleScreen({
       </div>
 
       {/* Main Title Lockup (raised slightly to accommodate menu options cleanly) */}
-      <div className="relative z-10 flex flex-1 items-start px-8 pt-2 pb-10 sm:px-16 sm:pt-5 lg:px-24 lg:pt-8">
+      <div
+        className={`relative z-10 flex flex-1 ${
+          touch.isShortLandscape
+            ? 'items-center px-6 pt-0 pb-4'
+            : touch.isTabletLandscape
+              ? 'items-center px-12 pt-2 pb-6'
+              : 'items-start px-8 pt-2 pb-10 sm:px-16 sm:pt-5 lg:px-24 lg:pt-8'
+        }`}
+      >
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-          className="max-w-xl"
+          className={touch.isShortLandscape ? 'max-w-lg' : 'max-w-xl'}
         >
           <svg
-            width="42"
-            height="42"
+            width={touch.isShortLandscape ? '28' : '42'}
+            height={touch.isShortLandscape ? '28' : '42'}
             viewBox="0 0 44 44"
             fill="none"
             aria-hidden="true"
-            className="mb-4 text-[#d8a24a]"
+            className={`${touch.isShortLandscape ? 'mb-1.5' : 'mb-4'} text-[#d8a24a]`}
           >
             <rect
               x="22"
@@ -534,24 +550,49 @@ export function TitleScreen({
             <circle cx="22" cy="22" r="2.5" fill="currentColor" fillOpacity="0.85" />
           </svg>
 
-          <p className="mb-2 text-xs font-medium tracking-[0.22em] text-[#b89b6d] uppercase">
+          <p
+            className={`font-medium tracking-[0.22em] text-[#b89b6d] uppercase ${
+              touch.isShortLandscape ? 'mb-1 text-[10px]' : 'mb-2 text-xs'
+            }`}
+          >
             Capítulo 1
           </p>
 
-          <h1 className="font-display text-4xl font-semibold tracking-wide text-[#f0e9dc] sm:text-5xl lg:text-6xl text-balance">
+          <h1
+            className={`font-display font-semibold tracking-wide text-[#f0e9dc] text-balance ${
+              touch.isShortLandscape
+                ? 'text-3xl'
+                : 'text-4xl sm:text-5xl lg:text-6xl'
+            }`}
+          >
             Limiar das Cinzas
           </h1>
 
-          <p className="mt-4 max-w-md text-sm leading-relaxed text-[#b2bac6] sm:text-base">
+          <p
+            className={`leading-relaxed text-[#b2bac6] ${
+              touch.isShortLandscape
+                ? 'mt-1.5 max-w-md text-xs'
+                : 'mt-4 max-w-md text-sm sm:text-base'
+            }`}
+          >
             Preso em um estudo silencioso cercado de livros e sombras, vasculhe cada canto
             em busca da chave oculta e descubra o que o aguarda além da porta trancada.
           </p>
 
-          <nav aria-label="Menu do capítulo" className="mt-7 flex flex-col items-start gap-2.5">
+          <nav
+            aria-label="Menu do capítulo"
+            className={
+              touch.isShortLandscape
+                ? 'mt-3.5 grid grid-cols-2 gap-x-8 gap-y-1.5'
+                : 'mt-7 flex flex-col items-start gap-2.5'
+            }
+          >
             <button
               type="button"
               onClick={onStart}
-              className="cursor-pointer bg-transparent py-1 text-left font-display text-lg font-medium tracking-wider text-[#f3dfb8] transition-all duration-150 hover:translate-x-1.5 hover:text-[#ffe8bc] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e6b665] sm:text-xl"
+              className={`cursor-pointer bg-transparent text-left font-display font-medium tracking-wider text-[#f3dfb8] transition-all duration-150 hover:translate-x-1.5 hover:text-[#ffe8bc] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e6b665] ${
+                touch.isShortLandscape ? 'py-0.5 text-base' : 'py-1 text-lg sm:text-xl'
+              }`}
             >
               Novo Jogo
             </button>
@@ -564,7 +605,9 @@ export function TitleScreen({
                   onLoadGame();
                 }
               }}
-              className={`flex items-baseline gap-3 bg-transparent py-1 text-left font-display text-lg font-medium tracking-wider transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e6b665] sm:text-xl ${
+              className={`flex items-baseline gap-2.5 bg-transparent text-left font-display font-medium tracking-wider transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e6b665] ${
+                touch.isShortLandscape ? 'py-0.5 text-base' : 'py-1 text-lg sm:text-xl'
+              } ${
                 savedGame
                   ? 'cursor-pointer text-[#e6dfd3] hover:translate-x-1.5 hover:text-[#ffe8bc]'
                   : 'cursor-not-allowed text-[#5c6472]'
@@ -572,7 +615,7 @@ export function TitleScreen({
             >
               <span>Carregar</span>
               {savedGame && (
-                <span className="font-sans text-xs font-normal tracking-normal text-[#8f99a8]">
+                <span className="font-sans text-[11px] font-normal tracking-normal text-[#8f99a8]">
                   {savedGame.zoneName}
                 </span>
               )}
@@ -584,7 +627,9 @@ export function TitleScreen({
                 soundEngine.playUiClick();
                 setSettingsOpen(true);
               }}
-              className="cursor-pointer bg-transparent py-1 text-left font-display text-lg font-medium tracking-wider text-[#e6dfd3] transition-all duration-150 hover:translate-x-1.5 hover:text-[#ffe8bc] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e6b665] sm:text-xl"
+              className={`cursor-pointer bg-transparent text-left font-display font-medium tracking-wider text-[#e6dfd3] transition-all duration-150 hover:translate-x-1.5 hover:text-[#ffe8bc] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e6b665] ${
+                touch.isShortLandscape ? 'py-0.5 text-base' : 'py-1 text-lg sm:text-xl'
+              }`}
             >
               Configuração
             </button>
@@ -595,7 +640,9 @@ export function TitleScreen({
                 soundEngine.playUiClick();
                 onBackToChapters?.();
               }}
-              className="cursor-pointer bg-transparent py-1 text-left font-display text-lg font-medium tracking-wider text-[#aeb6c4] transition-all duration-150 hover:translate-x-1.5 hover:text-[#f0e9dc] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e6b665] sm:text-xl"
+              className={`cursor-pointer bg-transparent text-left font-display font-medium tracking-wider text-[#aeb6c4] transition-all duration-150 hover:translate-x-1.5 hover:text-[#f0e9dc] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e6b665] ${
+                touch.isShortLandscape ? 'py-0.5 text-base' : 'py-1 text-lg sm:text-xl'
+              }`}
             >
               Sair do Jogo
             </button>

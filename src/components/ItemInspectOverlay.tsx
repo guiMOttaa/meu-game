@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createInspectItemGroup } from '../game/inspectModels';
+import { useTouchViewport } from '../game/touch';
 import { InventoryItem } from '../game/types';
 
 interface ItemInspectOverlayProps {
@@ -42,6 +43,8 @@ function disposeGroup(group: THREE.Group): void {
 
 export function ItemInspectOverlay({ item, onClose }: ItemInspectOverlayProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
+  const touch = useTouchViewport();
+  const compact = touch.isShortLandscape;
   const controlsApiRef = useRef<{
     zoomBy: (factor: number) => void;
     nudge: (dAzimuth: number, dPolar: number) => void;
@@ -303,12 +306,20 @@ export function ItemInspectOverlay({ item, onClose }: ItemInspectOverlayProps) {
       />
 
       {/* Top Header */}
-      <div className="relative z-10 mx-auto flex w-full max-w-4xl items-center justify-between px-6 pt-6">
+      <div
+        className={`relative z-10 mx-auto flex w-full max-w-4xl items-center justify-between ${
+          compact ? 'px-4 pt-2.5' : 'px-6 pt-6'
+        }`}
+      >
         <div>
           <span className="font-mono text-[10px] tracking-widest text-[#d8a24a] uppercase">
             Visão do Investigador • Inspeção
           </span>
-          <h2 className="mt-0.5 font-display text-xl font-semibold tracking-wide text-[#efe5d4] sm:text-2xl">
+          <h2
+            className={`mt-0.5 font-display font-semibold tracking-wide text-[#efe5d4] ${
+              compact ? 'text-lg' : 'text-xl sm:text-2xl'
+            }`}
+          >
             {item.name}
           </h2>
         </div>
@@ -329,25 +340,29 @@ export function ItemInspectOverlay({ item, onClose }: ItemInspectOverlayProps) {
         transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
         className="relative z-10 mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center px-4"
       >
-        <div className="relative h-[320px] w-full sm:h-[380px]">
+        <div className={`relative w-full ${compact ? 'h-[42dvh] min-h-[150px]' : 'h-[320px] sm:h-[380px]'}`}>
           <div
             ref={mountRef}
             className="h-full w-full cursor-grab active:cursor-grabbing"
           />
 
           {/* Subtle first-person coat cuffs framing the lower corners */}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -bottom-2 left-4 h-14 w-28 rotate-[-14deg] rounded-t-sm border-t border-white/8 bg-[#12161f]/80 sm:left-14"
-          />
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -bottom-2 right-4 h-14 w-28 rotate-[14deg] rounded-t-sm border-t border-white/8 bg-[#12161f]/80 sm:right-14"
-          />
+          {!compact && (
+            <>
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute -bottom-2 left-4 h-14 w-28 rotate-[-14deg] rounded-t-sm border-t border-white/8 bg-[#12161f]/80 sm:left-14"
+              />
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute -bottom-2 right-4 h-14 w-28 rotate-[14deg] rounded-t-sm border-t border-white/8 bg-[#12161f]/80 sm:right-14"
+              />
+            </>
+          )}
         </div>
 
         {/* Camera / Object Rotation Controls */}
-        <div className="mt-2 flex items-center gap-2">
+        <div className={`${compact ? 'mt-1' : 'mt-2'} flex items-center gap-2`}>
           <button
             type="button"
             onClick={handleZoomOut}
@@ -377,13 +392,23 @@ export function ItemInspectOverlay({ item, onClose }: ItemInspectOverlayProps) {
       </motion.div>
 
       {/* Bottom Clue & Interaction Prompt */}
-      <div className="relative z-10 mx-auto mb-6 w-full max-w-2xl px-6 text-center">
-        <div className="border border-white/12 bg-[#090c12] px-5 py-3.5 shadow-xl">
-          <p className="text-sm leading-relaxed text-[#e8dfd0]">
+      <div
+        className={`relative z-10 mx-auto w-full max-w-2xl text-center ${
+          compact ? 'mb-2.5 px-4' : 'mb-6 px-6'
+        }`}
+      >
+        <div
+          className={`border border-white/12 bg-[#090c12] shadow-xl ${
+            compact ? 'px-3.5 py-2' : 'px-5 py-3.5'
+          }`}
+        >
+          <p className={`leading-relaxed text-[#e8dfd0] ${compact ? 'text-xs' : 'text-sm'}`}>
             {item.inspectDetail ?? item.description}
           </p>
-          <p className="mt-1.5 font-mono text-[10px] tracking-wide text-[#858e9e]">
-            Arraste com o mouse ou use as setas para girar • Roda do mouse para aproximar
+          <p className="mt-1 font-mono text-[10px] tracking-wide text-[#858e9e]">
+            {touch.isTouch
+              ? 'Arraste com o dedo para girar • Pinça ou botões para aproximar'
+              : 'Arraste com o mouse ou use as setas para girar • Roda do mouse para aproximar'}
           </p>
         </div>
       </div>

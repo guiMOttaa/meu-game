@@ -18,8 +18,17 @@ body,
   padding: 0;
   background-color: #07090d;
   overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
   user-select: none;
+  -webkit-user-select: none;
   cursor: var(--game-cursor-default, auto);
+}
+
+html.touch-device,
+html.touch-device body,
+html.touch-device #root {
+  touch-action: none;
 }
 
 .cursor-pointer {

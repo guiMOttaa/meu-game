@@ -3,6 +3,7 @@ import { Lock } from 'lucide-react';
 import { motion } from 'motion/react';
 import chapterOneArtwork from '../assets/images/study_title_backdrop_clean_1795749762511.jpg';
 import { GAME_VERSION } from '../game/version';
+import { useTouchViewport } from '../game/touch';
 
 interface ChapterSelectScreenProps {
   onSelectChapter: (chapterNumber: number) => void;
@@ -66,6 +67,8 @@ export function ChapterSelectScreen({ onSelectChapter }: ChapterSelectScreenProp
   const cardRefs = useRef<Record<number, HTMLButtonElement | null>>({});
   const completedRef = useRef(false);
   const fallbackTimerRef = useRef<number | null>(null);
+  const touch = useTouchViewport();
+  const isTouchLandscape = touch.isTouch && !touch.isPortrait;
 
   useEffect(() => {
     return () => {
@@ -116,7 +119,15 @@ export function ChapterSelectScreen({ onSelectChapter }: ChapterSelectScreenProp
   const isTransitioning = portal !== null;
 
   return (
-    <div className="fixed inset-0 z-30 flex flex-col items-center justify-center overflow-x-hidden overflow-y-auto bg-[#05070b] px-4 py-6 text-[#e4ded2]">
+    <div
+      className={`fixed inset-0 z-30 flex flex-col items-center justify-center overflow-x-hidden bg-[#05070b] text-[#e4ded2] ${
+        touch.isShortLandscape
+          ? 'overflow-hidden px-3 py-2'
+          : isTouchLandscape
+            ? 'overflow-hidden px-6 py-4'
+            : 'overflow-y-auto px-4 py-6'
+      }`}
+    >
       {/* Atmospheric subtle radial depth backdrop (silent screen) */}
       <div
         aria-hidden="true"
@@ -132,18 +143,44 @@ export function ChapterSelectScreen({ onSelectChapter }: ChapterSelectScreenProp
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: isTransitioning ? 0 : 1, y: isTransitioning ? -14 : 0 }}
         transition={{ duration: isTransitioning ? 0.24 : 0.45, ease: [0.16, 1, 0.3, 1] }}
-        className="relative z-10 mb-5 text-center sm:mb-8"
+        className={`relative z-10 text-center ${
+          touch.isShortLandscape
+            ? 'mb-2'
+            : isTouchLandscape
+              ? 'mb-4'
+              : 'mb-5 sm:mb-8'
+        }`}
       >
-        <p className="text-[11px] font-medium tracking-[0.28em] text-[#b89b6d] uppercase">
+        <p
+          className={`font-medium tracking-[0.28em] text-[#b89b6d] uppercase ${
+            touch.isShortLandscape ? 'text-[9px]' : 'text-[11px]'
+          }`}
+        >
           Seleção de Capítulos
         </p>
-        <h1 className="mt-1.5 font-display text-3xl font-semibold tracking-wider text-[#f0e9dc] sm:text-4xl">
+        <h1
+          className={`font-display font-semibold tracking-wider text-[#f0e9dc] ${
+            touch.isShortLandscape
+              ? 'mt-0.5 text-xl'
+              : isTouchLandscape
+                ? 'mt-1 text-3xl'
+                : 'mt-1.5 text-3xl sm:text-4xl'
+          }`}
+        >
           Capítulos
         </h1>
       </motion.div>
 
       {/* 4 Enlarged Pointed Twin-Triangle Diamond Chapter Cards */}
-      <div className="relative z-10 grid w-full max-w-7xl grid-cols-2 place-items-center gap-4 sm:gap-6 lg:grid-cols-4 lg:gap-6 xl:gap-8">
+      <div
+        className={`relative z-10 grid w-full max-w-7xl place-items-center ${
+          touch.isShortLandscape
+            ? 'grid-cols-4 gap-2 px-1'
+            : isTouchLandscape
+              ? 'grid-cols-4 gap-4 px-2'
+              : 'grid-cols-2 gap-4 sm:gap-6 lg:grid-cols-4 lg:gap-6 xl:gap-8'
+        }`}
+      >
         {CHAPTERS.map((chapter, idx) => {
           const isUnlocked = chapter.unlocked;
           const isExpanded = isUnlocked && hoveredChapter === chapter.number;
@@ -190,7 +227,13 @@ export function ChapterSelectScreen({ onSelectChapter }: ChapterSelectScreenProp
                 delay: isTransitioning ? 0 : idx * 0.08,
                 ease: [0.16, 1, 0.3, 1],
               }}
-              className={`group relative flex h-[252px] w-44 items-center justify-center bg-transparent focus-visible:outline-none sm:h-[322px] sm:w-56 lg:h-[360px] lg:w-[256px] xl:h-[416px] xl:w-[296px] ${
+              className={`group relative flex items-center justify-center bg-transparent focus-visible:outline-none ${
+                touch.isShortLandscape
+                  ? 'h-[min(62dvh,228px)] w-[min(21vw,162px)]'
+                  : isTouchLandscape
+                    ? 'h-[min(56dvh,360px)] w-[min(21vw,256px)]'
+                    : 'h-[252px] w-44 sm:h-[322px] sm:w-56 lg:h-[360px] lg:w-[256px] xl:h-[416px] xl:w-[296px]'
+              } ${
                 isUnlocked ? 'cursor-pointer' : 'cursor-not-allowed opacity-80'
               }`}
               style={{
@@ -345,14 +388,26 @@ export function ChapterSelectScreen({ onSelectChapter }: ChapterSelectScreenProp
               )}
 
               {/* Chapter Content: splits neatly above/below seam when closed, converges into the middle gap when expanded */}
-              <div className="relative z-10 flex w-full flex-col items-center justify-center px-5 text-center">
+              <div
+                className={`relative z-10 flex w-full flex-col items-center justify-center text-center ${
+                  touch.isShortLandscape ? 'px-2' : 'px-5'
+                }`}
+              >
                 <span
-                  className={`font-mono text-[10px] font-semibold tracking-[0.2em] uppercase transition-all duration-300 ease-out sm:text-[11px] xl:text-xs ${
+                  className={`font-mono font-semibold tracking-[0.2em] uppercase transition-all duration-300 ease-out ${
+                    touch.isShortLandscape
+                      ? 'text-[8.5px]'
+                      : 'text-[10px] sm:text-[11px] xl:text-xs'
+                  } ${
                     isUnlocked
                       ? isExpanded
                         ? 'translate-y-0 text-[#f3d08a] drop-shadow-[0_2px_8px_rgba(0,0,0,0.98)]'
-                        : '-translate-y-3.5 text-[#e2bc78] drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)] sm:-translate-y-4'
-                      : '-translate-y-3.5 text-[#5b6473] sm:-translate-y-4'
+                        : touch.isShortLandscape
+                          ? '-translate-y-2.5 text-[#e2bc78] drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)]'
+                          : '-translate-y-3.5 text-[#e2bc78] drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)] sm:-translate-y-4'
+                      : touch.isShortLandscape
+                        ? '-translate-y-2.5 text-[#5b6473]'
+                        : '-translate-y-3.5 text-[#5b6473] sm:-translate-y-4'
                   }`}
                 >
                   Capítulo {chapter.number}
@@ -360,18 +415,37 @@ export function ChapterSelectScreen({ onSelectChapter }: ChapterSelectScreenProp
 
                 {isUnlocked && chapter.title ? (
                   <h2
-                    className={`font-display text-[11px] leading-tight font-semibold tracking-wide whitespace-nowrap drop-shadow-[0_2px_10px_rgba(0,0,0,0.98)] transition-all duration-300 ease-out sm:text-[13.5px] lg:text-[15.5px] xl:text-[17.5px] ${
+                    className={`font-display leading-tight font-semibold tracking-wide whitespace-nowrap drop-shadow-[0_2px_10px_rgba(0,0,0,0.98)] transition-all duration-300 ease-out ${
+                      touch.isShortLandscape
+                        ? 'text-[9.5px]'
+                        : isTouchLandscape
+                          ? 'text-[13px]'
+                          : 'text-[11px] sm:text-[13.5px] lg:text-[15.5px] xl:text-[17.5px]'
+                    } ${
                       isExpanded
                         ? 'mt-0.5 translate-y-0 text-[#fff0d0]'
-                        : 'mt-0 translate-y-3.5 text-[#f6efe2] sm:translate-y-4'
+                        : touch.isShortLandscape
+                          ? 'mt-0 translate-y-2.5 text-[#f6efe2]'
+                          : 'mt-0 translate-y-3.5 text-[#f6efe2] sm:translate-y-4'
                     }`}
                   >
                     {chapter.title}
                   </h2>
                 ) : (
-                  <div className="mt-1 flex translate-y-4 flex-col items-center justify-center">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[#4a5260]/45 bg-[#12161f]/90 text-[#727b8a] sm:h-11 sm:w-11">
-                      <Lock className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={1.8} />
+                  <div
+                    className={`mt-1 flex flex-col items-center justify-center ${
+                      touch.isShortLandscape ? 'translate-y-2.5' : 'translate-y-4'
+                    }`}
+                  >
+                    <div
+                      className={`flex items-center justify-center rounded-full border border-[#4a5260]/45 bg-[#12161f]/90 text-[#727b8a] ${
+                        touch.isShortLandscape ? 'h-8 w-8' : 'h-10 w-10 sm:h-11 sm:w-11'
+                      }`}
+                    >
+                      <Lock
+                        className={touch.isShortLandscape ? 'h-3.5 w-3.5' : 'h-4 w-4 sm:h-5 sm:w-5'}
+                        strokeWidth={1.8}
+                      />
                     </div>
                   </div>
                 )}
@@ -447,9 +521,17 @@ export function ChapterSelectScreen({ onSelectChapter }: ChapterSelectScreenProp
         initial={{ opacity: 0 }}
         animate={{ opacity: isTransitioning ? 0 : 1 }}
         transition={{ duration: isTransitioning ? 0.2 : 0.45 }}
-        className="pointer-events-none fixed right-5 bottom-4 z-20 select-none sm:right-7 sm:bottom-5"
+        className={`pointer-events-none fixed z-20 select-none ${
+          touch.isShortLandscape
+            ? 'right-3 bottom-2'
+            : 'right-5 bottom-4 sm:right-7 sm:bottom-5'
+        }`}
       >
-        <span className="font-mono text-[11px] tracking-[0.18em] text-[#9b8f7a]/80">
+        <span
+          className={`font-mono tracking-[0.18em] text-[#9b8f7a]/80 ${
+            touch.isShortLandscape ? 'text-[10px]' : 'text-[11px]'
+          }`}
+        >
           Versão {GAME_VERSION}
         </span>
       </motion.div>

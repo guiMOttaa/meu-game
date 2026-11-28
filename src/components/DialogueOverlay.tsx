@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { getNpcWatcherPortraits, getProtagonistPortraits } from '../game/portraits';
 import { formatKeyCode, getDialogueTextClass } from '../game/settings';
+import { useTouchViewport } from '../game/touch';
 import { DialogueState, SubtitleSize } from '../game/types';
 
 interface DialogueOverlayProps {
@@ -23,6 +24,8 @@ export function DialogueOverlay({
 }: DialogueOverlayProps) {
   const npcFrames = useMemo(() => getNpcWatcherPortraits(), []);
   const protagFrames = useMemo(() => getProtagonistPortraits(), []);
+  const touch = useTouchViewport();
+  const compact = touch.isShortLandscape;
 
   const [mouthStep, setMouthStep] = useState(0);
   const [blinking, setBlinking] = useState(false);
@@ -93,7 +96,11 @@ export function DialogueOverlay({
         className="absolute inset-0 bg-gradient-to-t from-[#05070b]/92 via-[#05070b]/35 to-transparent"
       />
 
-      <div className="relative z-10 mx-auto flex w-full max-w-6xl items-end justify-between px-3 pb-3 sm:px-8 sm:pb-6">
+      <div
+        className={`relative z-10 mx-auto flex w-full max-w-6xl items-end justify-between ${
+          compact ? 'px-3 pb-2' : 'px-3 pb-3 sm:px-8 sm:pb-6'
+        }`}
+      >
         {/* LEFT SIDE: Speaking NPC Bust Portrait + Angled Speech Box */}
         <div className="flex items-end gap-2 sm:gap-3 min-w-0 flex-1">
           <motion.div
@@ -111,7 +118,9 @@ export function DialogueOverlay({
               alt={dialogue.speakerName}
               draggable={false}
               style={{ imageRendering: 'pixelated' }}
-              className="h-40 w-36 object-contain drop-shadow-[0_12px_20px_rgba(0,0,0,0.85)] sm:h-56 sm:w-48"
+              className={`object-contain drop-shadow-[0_12px_20px_rgba(0,0,0,0.85)] ${
+                compact ? 'h-28 w-24' : 'h-40 w-36 sm:h-56 sm:w-48'
+              }`}
             />
           </motion.div>
 
@@ -120,7 +129,9 @@ export function DialogueOverlay({
             initial={{ y: 14, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-            className="mb-3 flex max-w-md flex-1 items-stretch gap-2.5 sm:mb-6"
+            className={`flex max-w-md flex-1 items-stretch gap-2.5 ${
+              compact ? 'mb-1.5' : 'mb-3 sm:mb-6'
+            }`}
           >
             {/* Left vertical speaker bar */}
             <div
@@ -143,13 +154,23 @@ export function DialogueOverlay({
               <div
                 onClick={onAdvance}
                 style={{ backgroundColor: `rgba(9, 12, 18, ${subtitleBgOpacity})` }}
-                className="relative cursor-pointer border border-white/18 px-4 py-3 text-[#ece4d6] shadow-[0_14px_32px_rgba(0,0,0,0.65)] sm:px-5 sm:py-3.5"
+                className={`relative cursor-pointer border border-white/18 text-[#ece4d6] shadow-[0_14px_32px_rgba(0,0,0,0.65)] ${
+                  compact ? 'px-3 py-2' : 'px-4 py-3 sm:px-5 sm:py-3.5'
+                }`}
               >
-                <p className={`min-h-[2.8em] ${getDialogueTextClass(subtitleSize)}`}>
+                <p
+                  className={`${
+                    compact ? 'min-h-[2.2em]' : 'min-h-[2.8em]'
+                  } ${getDialogueTextClass(subtitleSize)}`}
+                >
                   {visibleText}
                 </p>
 
-                <div className="mt-2.5 flex items-center justify-between gap-3 border-t border-white/8 pt-2">
+                <div
+                  className={`flex items-center justify-between gap-3 border-t border-white/8 ${
+                    compact ? 'mt-1.5 pt-1.5' : 'mt-2.5 pt-2'
+                  }`}
+                >
                   <button
                     type="button"
                     aria-label="Fechar diálogo"
@@ -159,7 +180,7 @@ export function DialogueOverlay({
                     }}
                     className="cursor-pointer font-mono text-[11px] text-[#8e98a8] transition-colors hover:text-[#dfd8cb]"
                   >
-                    [Esc]
+                    {touch.isTouch ? 'Fechar' : '[Esc]'}
                   </button>
 
                   <button
@@ -171,8 +192,13 @@ export function DialogueOverlay({
                     className="inline-flex cursor-pointer items-center gap-1.5 font-mono text-xs font-medium text-[#e6b665] transition-colors hover:text-[#f7d899]"
                   >
                     <span>
-                      [{formatKeyCode(interactKey, true)}]{' '}
-                      {isLastLine ? 'Encerrar' : 'Continuar'}
+                      {touch.isTouch
+                        ? isLastLine
+                          ? 'Toque • Encerrar'
+                          : 'Toque • Continuar'
+                        : `[${formatKeyCode(interactKey, true)}] ${
+                            isLastLine ? 'Encerrar' : 'Continuar'
+                          }`}
                     </span>
                   </button>
                 </div>
@@ -193,7 +219,9 @@ export function DialogueOverlay({
             alt="Investigador"
             draggable={false}
             style={{ imageRendering: 'pixelated' }}
-            className="h-56 w-48 object-contain brightness-90 drop-shadow-[0_12px_20px_rgba(0,0,0,0.85)]"
+            className={`object-contain brightness-90 drop-shadow-[0_12px_20px_rgba(0,0,0,0.85)] ${
+              compact ? 'h-28 w-24' : 'h-56 w-48'
+            }`}
           />
         </motion.div>
       </div>

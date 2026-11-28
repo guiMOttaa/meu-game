@@ -11,6 +11,8 @@ import { LevelCompleteModal, PauseModal } from './components/ModalScreens';
 import { OpeningCutscene } from './components/OpeningCutscene';
 import { SettingsModal } from './components/SettingsModal';
 import { TitleScreen } from './components/TitleScreen';
+import { TouchControls } from './components/TouchControls';
+import { RotateCw } from 'lucide-react';
 import { ColorblindFilterDefs, getColorblindCssFilter } from './game/accessibility';
 import { soundEngine } from './game/audio';
 import { initRusticCursors } from './game/cursor';
@@ -21,6 +23,7 @@ import {
   loadGameSettings,
   saveGameSettings,
 } from './game/settings';
+import { useTouchViewport } from './game/touch';
 import {
   DialogueState,
   GamePhase,
@@ -42,6 +45,8 @@ const INITIAL_HUD: HudSnapshot = {
   inventoryOpen: false,
   flashlightOn: false,
   nearestId: null,
+  hasPrimaryTarget: false,
+  hasSecondaryTarget: false,
   cutsceneActive: false,
   showPresentDayTitle: false,
 };
@@ -63,6 +68,7 @@ export default function App() {
   const cursorTimerRef = useRef<number | null>(null);
   const lastPointerPosRef = useRef<{ x: number; y: number } | null>(null);
   const [cursorIdle, setCursorIdle] = useState(false);
+  const touch = useTouchViewport();
 
   const handleEngineReady = useCallback((engine: GameEngine | null) => {
     engineRef.current = engine;
@@ -164,6 +170,12 @@ export default function App() {
       soundEngine.stopAmbience();
     };
   }, []);
+
+  useEffect(() => {
+    if (touch.isPortrait) {
+      engineRef.current?.clearInputs();
+    }
+  }, [touch.isPortrait]);
 
   useEffect(() => {
     if (phase !== 'PLAYING' || !hud.inventoryOpen) {
@@ -309,8 +321,28 @@ export default function App() {
     }
   }, [phase, hud.cutsceneActive, completeOpeningCutscene]);
 
+  const handleTouchMove = useCallback((vx: number, vy: number) => {
+    engineRef.current?.setTouchMove(vx, vy);
+  }, []);
+
+  const handleTouchPrimaryInteract = useCallback(() => {
+    engineRef.current?.tryInteractNearest();
+  }, []);
+
+  const handleTouchSecondaryInteract = useCallback(() => {
+    engineRef.current?.trySecondaryInteractNearest();
+  }, []);
+
   const isAnyCutsceneActive =
     phase === 'OPENING_CUTSCENE' || (phase === 'PLAYING' && hud.cutsceneActive);
+
+  const showTouchControls =
+    touch.isTouch &&
+    !touch.isPortrait &&
+    phase === 'PLAYING' &&
+    !hud.cutsceneActive &&
+    !dialogue?.active &&
+    !hud.inventoryOpen;
 
   return (
     <>
@@ -369,8 +401,22 @@ export default function App() {
               hud={hud}
               keyBindings={settings.controls}
               dialogueActive={Boolean(dialogue?.active)}
+              isTouch={touch.isTouch}
+              isShortLandscape={touch.isShortLandscape}
               onSelectHandSlot={handleSelectHandSlot}
               onToggleInventory={handleToggleInventory}
+              onPauseRequest={handlePauseRequest}
+            />
+          )}
+
+          {showTouchControls && (
+            <TouchControls
+              compact={touch.isShortLandscape}
+              hasPrimaryTarget={hud.hasPrimaryTarget}
+              hasSecondaryTarget={hud.hasSecondaryTarget}
+              onMove={handleTouchMove}
+              onPrimaryInteract={handleTouchPrimaryInteract}
+              onSecondaryInteract={handleTouchSecondaryInteract}
             />
           )}
 
@@ -397,7 +443,11 @@ export default function App() {
               key={subtitle.id}
               aria-live="polite"
               className={`pointer-events-none fixed inset-x-0 z-30 flex justify-center px-4 ${
-                hud.cutsceneActive ? 'bottom-8 sm:bottom-11' : 'bottom-24 sm:bottom-28'
+                hud.cutsceneActive
+                  ? 'bottom-8 sm:bottom-11'
+                  : touch.isShortLandscape
+                    ? 'bottom-16'
+                    : 'bottom-24 sm:bottom-28'
               }`}
             >
               <div
@@ -481,8 +531,26 @@ export default function App() {
 
       <CutsceneSkipHold
         active={isAnyCutsceneActive}
+        isTouch={touch.isTouch}
         onSkip={handleSkipActiveCutscene}
       />
+
+      {touch.isTouch && touch.isPortrait && (
+        <div
+          role="alert"
+          className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-4 bg-[#05070c]/96 px-8 text-center text-[#ece4d6] select-none"
+        >
+          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-[#d8a24a]/55 bg-[#19140d] text-[#f0c878]">
+            <RotateCw className="h-7 w-7 animate-pulse" />
+          </div>
+          <h2 className="font-display text-xl font-semibold tracking-wide text-[#f2ebde]">
+            Gire o aparelho para a horizontal
+          </h2>
+          <p className="max-w-xs text-xs leading-relaxed text-[#9ca5b5]">
+            Este jogo foi adaptado para ser jogado com o celular ou tablet deitado na horizontal.
+          </p>
+        </div>
+      )}
       </main>
     </>
   );

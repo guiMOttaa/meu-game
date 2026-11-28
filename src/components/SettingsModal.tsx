@@ -8,6 +8,7 @@ import {
   formatKeyCode,
   getWorldSubtitleTextClass,
 } from '../game/settings';
+import { useTouchViewport } from '../game/touch';
 import {
   AudioLanguageMode,
   ColorblindMode,
@@ -71,6 +72,8 @@ export function SettingsModal({
 }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('audio');
   const [listeningAction, setListeningAction] = useState<ControlAction | null>(null);
+  const touch = useTouchViewport();
+  const isTouchLandscape = touch.isTouch && !touch.isPortrait;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -200,20 +203,36 @@ export function SettingsModal({
       role="dialog"
       aria-modal="true"
       aria-label="Configurações"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[#040508]/85 p-4 sm:p-6"
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-[#040508]/85 ${
+        touch.isShortLandscape ? 'p-2' : 'p-4 sm:p-6'
+      }`}
     >
       <motion.div
         initial={{ opacity: 0, scale: 0.97, y: 6 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-        className="flex max-h-[90vh] w-full max-w-lg flex-col border border-white/14 bg-[#0b0e15] p-6 text-[#e6dfd3] shadow-2xl sm:p-7"
+        className={`flex w-full flex-col border border-white/14 bg-[#0b0e15] text-[#e6dfd3] shadow-2xl ${
+          touch.isShortLandscape
+            ? 'max-h-[94dvh] max-w-xl p-3.5'
+            : isTouchLandscape
+              ? 'max-h-[88dvh] max-w-xl p-5'
+              : 'max-h-[90vh] max-w-lg p-6 sm:p-7'
+        }`}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
+        <div
+          className={`flex items-start justify-between gap-4 border-b border-white/10 ${
+            touch.isShortLandscape ? 'pb-2' : 'pb-4'
+          }`}
+        >
           <div>
             <p className="text-[11px] font-medium tracking-[0.2em] text-[#b89b6d] uppercase">
               Ajustes Gerais
             </p>
-            <h2 className="mt-0.5 font-display text-2xl font-semibold tracking-wide text-[#f2ebde]">
+            <h2
+              className={`mt-0.5 font-display font-semibold tracking-wide text-[#f2ebde] ${
+                touch.isShortLandscape ? 'text-lg' : 'text-2xl'
+              }`}
+            >
               Configurações
             </h2>
           </div>
@@ -232,7 +251,11 @@ export function SettingsModal({
         </div>
 
         {/* Category Tabs */}
-        <div className="mt-4 grid grid-cols-3 gap-2" role="tablist" aria-label="Categorias">
+        <div
+          className={`${touch.isShortLandscape ? 'mt-2.5' : 'mt-4'} grid grid-cols-3 gap-2`}
+          role="tablist"
+          aria-label="Categorias"
+        >
           <button
             type="button"
             role="tab"
@@ -290,7 +313,11 @@ export function SettingsModal({
           </button>
         </div>
 
-        <div className="game-scrollbar mt-5 flex-1 overflow-y-auto pr-2.5">
+        <div
+          className={`game-scrollbar flex-1 overflow-y-auto pr-2.5 ${
+            touch.isShortLandscape ? 'mt-3 touch-pan-y' : 'mt-5'
+          }`}
+        >
           {activeTab === 'audio' ? (
             <div className="flex flex-col gap-5">
               {/* Volume da Música */}
@@ -575,7 +602,11 @@ export function SettingsModal({
           )}
         </div>
 
-        <div className="mt-6 flex items-center justify-between gap-3 border-t border-white/10 pt-4">
+        <div
+          className={`flex items-center justify-between gap-3 border-t border-white/10 ${
+            touch.isShortLandscape ? 'mt-3 pt-2.5' : 'mt-6 pt-4'
+          }`}
+        >
           {activeTab === 'controls' ? (
             <button
               type="button"

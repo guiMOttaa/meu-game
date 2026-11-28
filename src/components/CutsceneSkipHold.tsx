@@ -4,6 +4,7 @@ import { soundEngine } from '../game/audio';
 
 interface CutsceneSkipHoldProps {
   active: boolean;
+  isTouch?: boolean;
   onSkip: () => void;
   holdDurationSec?: number;
   keyCode?: string;
@@ -16,6 +17,7 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
 export function CutsceneSkipHold({
   active,
+  isTouch = false,
   onSkip,
   holdDurationSec = DEFAULT_HOLD_DURATION_SEC,
   keyCode = 'KeyF',
@@ -27,6 +29,7 @@ export function CutsceneSkipHold({
   const holdingRef = useRef(false);
   const skippedRef = useRef(false);
   const startTimeRef = useRef(0);
+  const pointerIdRef = useRef<number | null>(null);
   const onSkipRef = useRef(onSkip);
   onSkipRef.current = onSkip;
 
@@ -34,6 +37,7 @@ export function CutsceneSkipHold({
     if (!active) {
       holdingRef.current = false;
       skippedRef.current = false;
+      pointerIdRef.current = null;
       setHolding(false);
       setProgress(0);
       return;
@@ -41,7 +45,16 @@ export function CutsceneSkipHold({
 
     skippedRef.current = false;
 
+    const beginHold = () => {
+      if (skippedRef.current || holdingRef.current) return;
+      holdingRef.current = true;
+      startTimeRef.current = performance.now();
+      setHolding(true);
+      setProgress(0);
+    };
+
     const resetHold = () => {
+      pointerIdRef.current = null;
       if (!holdingRef.current) return;
       holdingRef.current = false;
       setHolding(false);
@@ -51,17 +64,27 @@ export function CutsceneSkipHold({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code !== keyCode || skippedRef.current) return;
       e.preventDefault();
-      if (!holdingRef.current) {
-        holdingRef.current = true;
-        startTimeRef.current = performance.now();
-        setHolding(true);
-        setProgress(0);
-      }
+      beginHold();
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.code !== keyCode) return;
       resetHold();
+    };
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (!isTouch || skippedRef.current) return;
+      if (e.pointerType === 'mouse') return;
+      if (pointerIdRef.current === null) {
+        pointerIdRef.current = e.pointerId;
+        beginHold();
+      }
+    };
+
+    const onPointerEnd = (e: PointerEvent) => {
+      if (pointerIdRef.current === e.pointerId) {
+        resetHold();
+      }
     };
 
     const onVisibilityChange = () => {
@@ -70,17 +93,24 @@ export function CutsceneSkipHold({
 
     window.addEventListener('keydown', onKeyDown, true);
     window.addEventListener('keyup', onKeyUp, true);
+    window.addEventListener('pointerdown', onPointerDown, true);
+    window.addEventListener('pointerup', onPointerEnd, true);
+    window.addEventListener('pointercancel', onPointerEnd, true);
     window.addEventListener('blur', resetHold);
     document.addEventListener('visibilitychange', onVisibilityChange);
 
     return () => {
       window.removeEventListener('keydown', onKeyDown, true);
       window.removeEventListener('keyup', onKeyUp, true);
+      window.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('pointerup', onPointerEnd, true);
+      window.removeEventListener('pointercancel', onPointerEnd, true);
       window.removeEventListener('blur', resetHold);
       document.removeEventListener('visibilitychange', onVisibilityChange);
       holdingRef.current = false;
+      pointerIdRef.current = null;
     };
-  }, [active, keyCode]);
+  }, [active, keyCode, isTouch]);
 
   useEffect(() => {
     if (!active || !holding) return;
@@ -176,8 +206,12 @@ export function CutsceneSkipHold({
               />
             </svg>
 
-            <span className="absolute font-mono text-sm font-bold tracking-tight text-[#f4e4c1]">
-              {keyLabel}
+            <span
+              className={`absolute font-mono font-bold tracking-tight text-[#f4e4c1] ${
+                isTouch ? 'text-[10px]' : 'text-sm'
+              }`}
+            >
+              {isTouch ? '>>' : keyLabel}
             </span>
           </div>
 

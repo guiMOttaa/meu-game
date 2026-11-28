@@ -46,6 +46,8 @@ export interface HudSnapshot {
   inventoryOpen: boolean;
   flashlightOn: boolean;
   nearestId: string | null;
+  hasPrimaryTarget: boolean;
+  hasSecondaryTarget: boolean;
   cutsceneActive: boolean;
   showPresentDayTitle: boolean;
 }
@@ -130,6 +132,8 @@ export class GameEngine {
   private shakeIntensity = 0;
 
   private heldKeys = new Set<string>();
+  private touchMoveX = 0;
+  private touchMoveY = 0;
   private phase: GamePhase = 'TITLE';
   private rafId: number | null = null;
   private lastTime = 0;
@@ -305,6 +309,8 @@ export class GameEngine {
     }
     if (phase !== 'PLAYING') {
       this.heldKeys.clear();
+      this.touchMoveX = 0;
+      this.touchMoveY = 0;
       this.inventoryOpen = false;
       soundEngine.stopWakeVoice();
       if (phase === 'PAUSED') {
@@ -353,6 +359,8 @@ export class GameEngine {
     this.nearestSecondaryTarget = null;
     this.lastHudSignature = '';
     this.heldKeys.clear();
+    this.touchMoveX = 0;
+    this.touchMoveY = 0;
     this.tvPlaybackTimer = 0;
     this.tvSubtitleIndex = -1;
     soundEngine.stopTvAudio();
@@ -486,6 +494,8 @@ export class GameEngine {
     this.shakeTimer = 0;
     this.gateWalkTimer = 0;
     this.heldKeys.clear();
+    this.touchMoveX = 0;
+    this.touchMoveY = 0;
     this.tvPlaybackTimer = 0;
     this.tvSubtitleIndex = -1;
     soundEngine.stopTvAudio();
@@ -634,8 +644,21 @@ export class GameEngine {
     this.heldKeys.delete(e.code);
   }
 
+  public setTouchMove(vx: number, vy: number): void {
+    const mag = Math.hypot(vx, vy);
+    if (mag > 1) {
+      this.touchMoveX = vx / mag;
+      this.touchMoveY = vy / mag;
+    } else {
+      this.touchMoveX = vx;
+      this.touchMoveY = vy;
+    }
+  }
+
   public clearInputs(): void {
     this.heldKeys.clear();
+    this.touchMoveX = 0;
+    this.touchMoveY = 0;
   }
 
   public handleCanvasClick(clientX: number, clientY: number): void {
@@ -760,6 +783,8 @@ export class GameEngine {
       this.player.vy = 0;
       this.player.isMoving = false;
       this.heldKeys.clear();
+      this.touchMoveX = 0;
+      this.touchMoveY = 0;
       return;
     }
 
@@ -791,18 +816,35 @@ export class GameEngine {
       moveX += 1;
     }
 
-    const len = Math.hypot(moveX, moveY);
-    const speed = 152;
+    const keyboardLen = Math.hypot(moveX, moveY);
+    let moveDirX = 0;
+    let moveDirY = 0;
+    let moveStrength = 0;
 
-    if (len > 0) {
-      const nx = moveX / len;
-      const ny = moveY / len;
+    if (keyboardLen > 0) {
+      moveDirX = moveX / keyboardLen;
+      moveDirY = moveY / keyboardLen;
+      moveStrength = 1;
+    } else {
+      const touchMag = Math.hypot(this.touchMoveX, this.touchMoveY);
+      if (touchMag > 0.08) {
+        moveDirX = this.touchMoveX / touchMag;
+        moveDirY = this.touchMoveY / touchMag;
+        moveStrength = Math.min(1, touchMag);
+      }
+    }
+
+    const speed = 152 * moveStrength;
+
+    if (moveStrength > 0) {
+      const nx = moveDirX;
+      const ny = moveDirY;
       this.player.vx = nx * speed;
       this.player.vy = ny * speed;
       this.player.facingX = nx;
       this.player.facingY = ny;
       this.player.isMoving = true;
-      this.player.walkCycle += dt;
+      this.player.walkCycle += dt * (0.45 + 0.55 * moveStrength);
       if (this.player.interactAnim > 0) {
         this.player.interactAnim = 0;
         this.player.interactKind = 'none';
@@ -828,7 +870,7 @@ export class GameEngine {
       this.progress.currentZone = nextZone;
     }
 
-    if (this.player.y <= -266 && this.player.x >= 860 && this.player.x <= 976 && moveY < 0) {
+    if (this.player.y <= -266 && this.player.x >= 860 && this.player.x <= 976 && moveDirY < -0.25) {
       this.gateWalkTimer += dt;
       if (this.gateWalkTimer > 0.16) {
         const gate = this.level.interactables.find((i) => i.id === 'large_gate');
@@ -869,6 +911,8 @@ export class GameEngine {
     this.player.vx = 0;
     this.player.vy = 0;
     this.heldKeys.clear();
+    this.touchMoveX = 0;
+    this.touchMoveY = 0;
 
     if (ic.timer < INTRO_SLEEP_END) {
       ic.phase = 'sleeping';
@@ -1102,14 +1146,30 @@ export class GameEngine {
   }
 
   public tryInteractNearest(): void {
-    if (this.phase !== 'PLAYING' || this.progress.gateTriggered) return;
+    if (
+      this.phase !== 'PLAYING' ||
+      this.introCutscene.active ||
+      this.progress.gateTriggered ||
+      this.dialogue?.active ||
+      this.inventoryOpen
+    ) {
+      return;
+    }
     if (this.nearestInteractable) {
       this.interactWith(this.nearestInteractable);
     }
   }
 
   public trySecondaryInteractNearest(): void {
-    if (this.phase !== 'PLAYING' || this.progress.gateTriggered) return;
+    if (
+      this.phase !== 'PLAYING' ||
+      this.introCutscene.active ||
+      this.progress.gateTriggered ||
+      this.dialogue?.active ||
+      this.inventoryOpen
+    ) {
+      return;
+    }
     if (this.nearestSecondaryTarget) {
       this.secondaryInteractWith(this.nearestSecondaryTarget);
     }
@@ -1660,7 +1720,9 @@ export class GameEngine {
       this.introCutscene.active &&
       this.introCutscene.timer >= 0.45 &&
       this.introCutscene.timer < 3.15;
-    const sig = `${zoneName}|${objectiveText}|${handsSig}|${this.activeHandIndex}|${bagSig}|${bpSig}|${this.progress.bagCapacity}|${this.inventoryOpen}|${this.progress.flashlightOn}|${nearestId}|${cutsceneActive}|${showPresentDayTitle}`;
+    const hasPrimaryTarget = this.nearestInteractable !== null;
+    const hasSecondaryTarget = this.nearestSecondaryTarget !== null;
+    const sig = `${zoneName}|${objectiveText}|${handsSig}|${this.activeHandIndex}|${bagSig}|${bpSig}|${this.progress.bagCapacity}|${this.inventoryOpen}|${this.progress.flashlightOn}|${nearestId}|${hasPrimaryTarget}|${hasSecondaryTarget}|${cutsceneActive}|${showPresentDayTitle}`;
     if (sig === this.lastHudSignature) return;
     this.lastHudSignature = sig;
 
@@ -1675,6 +1737,8 @@ export class GameEngine {
       inventoryOpen: this.inventoryOpen,
       flashlightOn: this.progress.flashlightOn,
       nearestId,
+      hasPrimaryTarget,
+      hasSecondaryTarget,
       cutsceneActive,
       showPresentDayTitle,
     });

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Pause } from 'lucide-react';
 import { HudSnapshot } from '../game/engine';
 import { getItemIcons } from '../game/itemIcons';
 import { formatKeyCode } from '../game/settings';
@@ -8,8 +9,11 @@ interface HudOverlayProps {
   hud: HudSnapshot;
   keyBindings: KeyBindings;
   dialogueActive?: boolean;
+  isTouch?: boolean;
+  isShortLandscape?: boolean;
   onSelectHandSlot: (index: number) => void;
   onToggleInventory: () => void;
+  onPauseRequest?: () => void;
 }
 
 function RoundBackpackIcon({ equipped }: { equipped: boolean }) {
@@ -75,8 +79,11 @@ export function HudOverlay({
   hud,
   keyBindings,
   dialogueActive = false,
+  isTouch = false,
+  isShortLandscape = false,
   onSelectHandSlot,
   onToggleInventory,
+  onPauseRequest,
 }: HudOverlayProps) {
   const icons = useMemo(() => getItemIcons(), []);
   const hasBackpackEquipped = Boolean(hud.equippedBackpack || hud.bagCapacity > 0);
@@ -142,22 +149,34 @@ export function HudOverlay({
     };
   }, []);
 
-  const showHotbar = hotbarVisible || hotbarHovered;
+  const showHotbar = isTouch || hotbarVisible || hotbarHovered;
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-20 flex flex-col justify-between p-5 sm:p-7">
-      {/* Top Bar: Zone & Objective on left, Round Backpack indicator on right */}
+    <div
+      className={`pointer-events-none fixed inset-0 z-20 flex flex-col justify-between ${
+        isShortLandscape ? 'p-3' : 'p-5 sm:p-7'
+      }`}
+    >
+      {/* Top Bar: Zone & Objective on left, Round Backpack indicator (+ Pause on touch) on right */}
       <div className="flex items-start justify-between gap-4">
         <div className="max-w-xs">
-          <h2 className="font-display text-base font-semibold tracking-wide text-[#e8dfd0] sm:text-lg">
+          <h2
+            className={`font-display font-semibold tracking-wide text-[#e8dfd0] ${
+              isShortLandscape ? 'text-sm' : 'text-base sm:text-lg'
+            }`}
+          >
             {hud.zoneName}
           </h2>
-          <p className="mt-0.5 text-xs text-[#9aa3b2] sm:text-sm">
+          <p
+            className={`mt-0.5 text-[#9aa3b2] ${
+              isShortLandscape ? 'text-[11px]' : 'text-xs sm:text-sm'
+            }`}
+          >
             {hud.objectiveText}
           </p>
         </div>
 
-        <div className="pointer-events-auto flex items-center">
+        <div className="pointer-events-auto flex items-center gap-2">
           {/* Small, rounded top-right Backpack indicator & Inventory trigger */}
           <button
             type="button"
@@ -172,7 +191,9 @@ export function HudOverlay({
                 ? `Mochila equipada — Inventário (${inventoryKey})`
                 : `Inventário (${inventoryKey})`
             }
-            className={`flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e6b665] ${
+            className={`flex cursor-pointer items-center justify-center rounded-full border transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e6b665] ${
+              isShortLandscape ? 'h-9 w-9' : 'h-10 w-10'
+            } ${
               hud.inventoryOpen
                 ? 'border-[#d8a24a]/75 bg-[#241b12]'
                 : hasBackpackEquipped
@@ -182,6 +203,19 @@ export function HudOverlay({
           >
             <RoundBackpackIcon equipped={hasBackpackEquipped} />
           </button>
+
+          {isTouch && onPauseRequest && (
+            <button
+              type="button"
+              onClick={onPauseRequest}
+              aria-label="Pausar jogo"
+              className={`flex cursor-pointer items-center justify-center rounded-full border border-white/15 bg-[#0c0f14]/88 text-[#c7d0de] transition-colors duration-150 active:border-[#d8a24a]/70 active:text-[#f5e3be] ${
+                isShortLandscape ? 'h-9 w-9' : 'h-10 w-10'
+              }`}
+            >
+              <Pause className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -209,7 +243,11 @@ export function HudOverlay({
                         ? `${item.name} — Tecla [${idx + 1}] para segurar ou [${inventoryKey}] para inventário`
                         : `Mão ${idx + 1} vazia — Tecla [${idx + 1}] para selecionar ou [${inventoryKey}] para inventário`
                     }
-                    className={`relative flex h-11 w-11 cursor-pointer items-center justify-center border transition-colors duration-150 sm:h-12 sm:w-12 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e6b665] ${
+                    className={`relative flex cursor-pointer items-center justify-center border transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e6b665] ${
+                      isShortLandscape
+                        ? 'h-9 w-9'
+                        : 'h-11 w-11 sm:h-12 sm:w-12'
+                    } ${
                       isLit
                         ? 'border-[#e6b665] bg-[#2a1f12] shadow-[inset_0_0_10px_rgba(230,182,101,0.28)]'
                         : isActive
@@ -233,7 +271,9 @@ export function HudOverlay({
                         alt={item.name}
                         draggable={false}
                         style={{ imageRendering: 'pixelated' }}
-                        className="h-7 w-7 object-contain sm:h-8 sm:w-8"
+                        className={`object-contain ${
+                          isShortLandscape ? 'h-6 w-6' : 'h-7 w-7 sm:h-8 sm:w-8'
+                        }`}
                       />
                     )}
                   </button>
